@@ -1,10 +1,13 @@
-import { supabase, BROADCAST_CHANNELS, ScoreBroadcast, SessionBroadcast } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, BROADCAST_CHANNELS, ScoreBroadcast, SessionBroadcast } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 class TournamentService {
   private channel: RealtimeChannel | null = null;
 
   subscribe(tournamentId: string, onScoreUpdate: (data: ScoreBroadcast) => void, onSessionEvent: (data: SessionBroadcast) => void) {
+    if (!isSupabaseConfigured) {
+      return () => {};
+    }
     this.channel = supabase.channel(BROADCAST_CHANNELS.TOURNAMENT(tournamentId));
 
     this.channel
@@ -22,6 +25,7 @@ class TournamentService {
   }
 
   broadcastScore(tournamentId: string, data: ScoreBroadcast) {
+    if (!isSupabaseConfigured) return;
     if (!this.channel) {
       this.channel = supabase.channel(BROADCAST_CHANNELS.TOURNAMENT(tournamentId));
       this.channel.subscribe();
@@ -34,6 +38,7 @@ class TournamentService {
   }
 
   broadcastSessionEvent(tournamentId: string, data: SessionBroadcast) {
+    if (!isSupabaseConfigured) return;
     if (!this.channel) {
       this.channel = supabase.channel(BROADCAST_CHANNELS.TOURNAMENT(tournamentId));
       this.channel.subscribe();
@@ -47,6 +52,9 @@ class TournamentService {
 
   // Presence for tracking referees
   trackPresence(tournamentId: string, refereeInfo: any) {
+    if (!isSupabaseConfigured) {
+      return { unsubscribe: () => {} };
+    }
     const presenceChannel = supabase.channel(`presence:${tournamentId}`, {
       config: {
         presence: {
