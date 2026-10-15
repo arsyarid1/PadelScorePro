@@ -1,20 +1,90 @@
 
 import React, { useState } from 'react';
-import { Tournament } from '../types';
+import { Tournament, Player } from '../types';
+import ReclubImportModal from './ReclubImportModal';
 
 interface DashboardProps {
   activeTournaments: Tournament[];
+  isSuperAdmin: boolean;
   onResume: (tournamentId: string) => void;
   onStartNew: () => void;
+  onImportReclub?: (players: Player[], suggestedName?: string) => void;
   onDelete: (id: string, password: string) => Promise<boolean>;
+  onOpenAdmin: (tournamentId: string) => void;
+  onLogin: (password: string) => Promise<boolean>;
+  onLogout: () => void;
 }
 
-const DeleteModal: React.FC<{
+const LoginModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (password: string) => void;
   error?: string;
 }> = ({ isOpen, onClose, onConfirm, error }) => {
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 bg-background-dark/95 backdrop-blur-xl animate-in fade-in duration-300">
+      <div className="w-full max-w-md bg-surface-dark border border-primary/20 rounded-[1.5rem] md:rounded-[2rem] shadow-[0_0_50px_rgba(0,255,204,0.1)] overflow-hidden">
+        <div className="p-6 md:p-8 border-b border-white/5 flex flex-col items-center gap-3 md:gap-4 text-center">
+          <div className="size-12 md:size-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-3xl md:text-4xl">admin_panel_settings</span>
+          </div>
+          <div>
+            <h2 className="text-lg md:text-xl font-black uppercase italic tracking-tighter text-white">Super Admin Login</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Authorized Personnel Only</p>
+          </div>
+        </div>
+        <div className="p-6 md:p-8 space-y-4 md:space-y-6">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Enter Password</label>
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"}
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && onConfirm(password)}
+                className="w-full h-12 md:h-14 bg-background-dark border border-white/10 rounded-xl md:rounded-2xl px-4 md:px-12 text-white font-bold focus:border-primary transition-all text-center"
+                placeholder="••••••••"
+              />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-0 bottom-0 my-auto flex items-center justify-center text-slate-500 hover:text-primary transition-colors"
+              >
+                <span className="material-symbols-outlined text-xl leading-none">
+                  {showPassword ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
+            </div>
+            {error && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-center">{error}</p>
+                <p className="text-[8px] text-slate-500 text-center uppercase tracking-tighter italic">Hint: all lowercase, no spaces</p>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="p-4 md:p-6 bg-background-dark/50 border-t border-white/5 flex gap-3 md:gap-4">
+          <button onClick={onClose} className="flex-1 h-12 md:h-14 border border-white/10 text-white font-bold uppercase tracking-widest rounded-xl md:rounded-2xl hover:bg-white/5 text-xs transition-all">Cancel</button>
+          <button onClick={() => onConfirm(password)} className="flex-1 h-12 md:h-14 bg-primary text-background-dark font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-lg text-xs transition-all">Login</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DeleteModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (password: string) => void;
+  isSpectator?: boolean;
+  error?: string;
+}> = ({ isOpen, onClose, onConfirm, isSpectator, error }) => {
   const [password, setPassword] = useState('');
 
   if (!isOpen) return null;
@@ -24,41 +94,92 @@ const DeleteModal: React.FC<{
       <div className="w-full max-w-md bg-surface-dark border border-red-500/20 rounded-[1.5rem] md:rounded-[2rem] shadow-[0_0_50px_rgba(239,68,68,0.1)] overflow-hidden">
         <div className="p-6 md:p-8 border-b border-white/5 flex flex-col items-center gap-3 md:gap-4 text-center">
           <div className="size-12 md:size-16 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
-            <span className="material-symbols-outlined text-3xl md:text-4xl">warning</span>
+            <span className="material-symbols-outlined text-3xl md:text-4xl">{isSpectator ? 'visibility_off' : 'warning'}</span>
           </div>
           <div>
-            <h2 className="text-lg md:text-xl font-black uppercase italic tracking-tighter text-white">Critical Action</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Irreversible Session Deletion</p>
+            <h2 className="text-lg md:text-xl font-black uppercase italic tracking-tighter text-white">
+              {isSpectator ? 'Remove from Device' : 'Critical Action'}
+            </h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+              {isSpectator ? 'This will only remove the feed from your device' : 'Irreversible Session Deletion'}
+            </p>
           </div>
         </div>
         <div className="p-6 md:p-8 space-y-4 md:space-y-6">
           <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">Confirm Delete</label>
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">Confirm Action</label>
             <input 
-              type="password"
+              type="text"
               autoFocus
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && onConfirm(password)}
-              className="w-full h-12 md:h-14 bg-background-dark border-red-500/20 rounded-xl md:rounded-2xl px-4 md:px-6 text-white font-bold focus:ring-red-500 focus:border-red-500 transition-all"
-              placeholder="••••••••"
+              className="w-full h-12 md:h-14 bg-background-dark border-red-500/20 rounded-xl md:rounded-2xl px-4 md:px-6 text-white font-bold focus:ring-red-500 focus:border-red-500 transition-all text-center"
+              placeholder={isSpectator ? "type 'delete' to remove" : "type 'delete' here"}
             />
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">type in 'delete' to confirm delete this session</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
+              {isSpectator ? "This does NOT delete the tournament for others" : "type in 'delete' to confirm delete this session"}
+            </p>
             {error && <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-center">{error}</p>}
           </div>
         </div>
         <div className="p-4 md:p-6 bg-background-dark/50 border-t border-white/5 flex gap-3 md:gap-4">
           <button onClick={onClose} className="flex-1 h-12 md:h-14 border border-white/10 text-white font-bold uppercase tracking-widest rounded-xl md:rounded-2xl hover:bg-white/5 text-xs transition-all">Cancel</button>
-          <button onClick={() => onConfirm(password)} className="flex-1 h-12 md:h-14 bg-red-500 text-white font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-lg text-xs transition-all">Delete</button>
+          <button onClick={() => onConfirm(password)} className="flex-1 h-12 md:h-14 bg-red-500 text-white font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-lg text-xs transition-all">
+            {isSpectator ? 'Remove' : 'Delete'}
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onStartNew, onDelete }) => {
+const COVER_IMAGES = [
+  '1.jpg', '2.jpg', '3.jpg', '4.jpg', '5.jpg', '6.jpg', '7.jpg', '8.jpg', 
+  '9.jpg', '10.jpg', '11.jpg', '12.jpg', '13.jpg', '14.jpg', '15.jpg', '16.jpg'
+];
+
+const getCoverImage = (seed: string) => {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % COVER_IMAGES.length;
+  return `/cover/${COVER_IMAGES[index]}`;
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ 
+  activeTournaments, 
+  isSuperAdmin, 
+  onResume, 
+  onStartNew, 
+  onImportReclub,
+  onDelete, 
+  onOpenAdmin, 
+  onLogin, 
+  onLogout 
+}) => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [showReclubModal, setShowReclubModal] = useState(false);
+  const [globalTournaments, setGlobalTournaments] = useState<any[]>([]);
+  const [loadingGlobal, setLoadingGlobal] = useState(false);
+
+  // Fetch global tournaments for all users to allow cross-device visibility
+  React.useEffect(() => {
+    setLoadingGlobal(true);
+    fetch('/api/admin/tournaments')
+      .then(res => res.json())
+      .then(data => {
+        // Filter out tournaments already in activeTournaments to avoid duplicates
+        const localIds = new Set(activeTournaments.map(t => t.id));
+        setGlobalTournaments(data.filter((t: any) => !localIds.has(t.id) && t.status === 'active'));
+      })
+      .catch(err => console.error("Failed to fetch global tournaments", err))
+      .finally(() => setLoadingGlobal(false));
+  }, [activeTournaments]);
 
   const handleDeleteConfirm = async (password: string) => {
     if (!deleteId) return;
@@ -71,6 +192,16 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
     }
   };
 
+  const handleLoginConfirm = async (password: string) => {
+    const success = await onLogin(password);
+    if (success) {
+      setShowLogin(false);
+      setLoginError('');
+    } else {
+      setLoginError('Invalid Password');
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
       <header className="sticky top-0 z-10 flex items-center justify-between px-6 md:px-8 py-4 bg-background-dark/80 backdrop-blur-md border-b border-border-dark">
@@ -78,6 +209,31 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
           <h2 className="text-lg md:text-2xl font-bold tracking-tight">Main Hub</h2>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
+          {isSuperAdmin ? (
+            <button 
+              onClick={onLogout}
+              className="flex items-center gap-2 px-3 h-9 md:h-10 rounded-lg md:rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] md:text-xs font-bold uppercase tracking-widest"
+            >
+              <span className="material-symbols-outlined text-lg">logout</span>
+              Logout
+            </button>
+          ) : (
+            <button 
+              onClick={() => setShowLogin(true)}
+              className="flex items-center justify-center size-9 md:size-10 rounded-lg md:rounded-xl bg-surface-dark border border-white/10 text-slate-400 hover:text-primary hover:border-primary/30 transition-all"
+              title="Super Admin Login"
+            >
+              <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
+            </button>
+          )}
+          <button 
+            onClick={() => setShowReclubModal(true)}
+            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 h-9 md:h-10 rounded-lg md:rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all text-[10px] md:text-xs font-black uppercase tracking-wider shadow-sm active:scale-95"
+            title="Import nama pemain dari link URL aplikasi Reclub"
+          >
+            <span className="material-symbols-outlined text-base md:text-lg">link</span>
+            <span>Import Reclub</span>
+          </button>
           <button 
             onClick={onStartNew}
             className="bg-primary text-background-dark px-4 md:px-5 h-9 md:h-10 rounded-lg md:rounded-xl font-bold text-[10px] md:text-sm tracking-tight flex items-center gap-2 hover:brightness-110 active:scale-95 transition-all"
@@ -107,7 +263,103 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
           ))}
         </div>
 
-        <div className="flex items-center gap-3 px-2">
+        {/* Reclub Import Banner Card */}
+        <div className="p-4 md:p-6 rounded-xl md:rounded-2xl bg-gradient-to-r from-emerald-950/40 via-surface-dark to-surface-dark border border-emerald-500/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg shadow-emerald-500/5">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="size-11 md:size-14 rounded-xl md:rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <span className="material-symbols-outlined text-2xl md:text-3xl">download_for_offline</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm md:text-base font-black uppercase italic tracking-tight text-white">
+                  Tarik Data Pemain dari Reclub
+                </h3>
+                <span className="text-[8px] md:text-[9px] bg-emerald-500/20 text-emerald-400 font-black px-2 py-0.5 rounded-full border border-emerald-500/30 uppercase tracking-widest">
+                  URL Link Importer
+                </span>
+              </div>
+              <p className="text-[10px] md:text-xs text-slate-400 font-medium mt-0.5 max-w-xl">
+                Ambil nama pemain & foto profil langsung dari tautan Reclub (atau tempel teks daftar hadir) secara instan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowReclubModal(true)}
+            className="h-10 md:h-12 px-5 md:px-6 rounded-xl md:rounded-2xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider text-xs md:text-sm hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 shrink-0 shadow-lg shadow-emerald-500/20"
+          >
+            <span className="material-symbols-outlined text-base md:text-lg">link</span>
+            <span>Import dari Reclub URL</span>
+          </button>
+        </div>
+
+        {globalTournaments.length > 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl md:text-2xl font-bold tracking-tight text-primary">Live Global Feed</h2>
+                <div className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setLoadingGlobal(true);
+                  fetch('/api/admin/tournaments')
+                    .then(res => res.json())
+                    .then(data => {
+                      const localIds = new Set(activeTournaments.map(t => t.id));
+                      setGlobalTournaments(data.filter((t: any) => !localIds.has(t.id) && t.status === 'active'));
+                    })
+                    .finally(() => setLoadingGlobal(false));
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/30 transition-all text-[10px] font-bold uppercase tracking-widest ${loadingGlobal ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={loadingGlobal}
+              >
+                <span className={`material-symbols-outlined text-sm ${loadingGlobal ? 'animate-spin' : ''}`}>refresh</span>
+                Refresh
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+              {globalTournaments.map(t => (
+                <div key={t.id} className="flex flex-col bg-surface-dark border-2 border-primary/20 rounded-xl md:rounded-2xl overflow-hidden hover:shadow-[0_0_30px_rgba(0,255,204,0.1)] transition-all group">
+                  <div className="h-24 md:h-32 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-t from-background-dark/90 to-transparent z-10"></div>
+                    <img 
+                      className="w-full h-full object-cover opacity-50" 
+                      alt="Global Session" 
+                      src={getCoverImage(t.id)} 
+                    />
+                    <div className="absolute top-3 left-3 z-20 flex gap-2">
+                      <span className="bg-primary text-background-dark text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase">Live Hub</span>
+                      <span className="bg-red-500 text-white text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase animate-pulse">Public</span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 z-20">
+                      <p className="text-white text-sm md:text-lg font-bold truncate pr-4">{t.name}</p>
+                      <p className="text-primary text-[10px] md:text-sm font-medium">{t.courts} Courts Active</p>
+                    </div>
+                  </div>
+                  <div className="p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] text-slate-500 font-bold uppercase">Shortcode</span>
+                        <span className="text-xs font-black text-primary tracking-widest">{t.shortcode || 'N/A'}</span>
+                      </div>
+                      <button 
+                        onClick={() => onResume(t.id)}
+                        className="px-6 py-2 bg-primary text-background-dark rounded-lg font-black text-[10px] uppercase tracking-widest hover:brightness-110 transition-all"
+                      >
+                        Watch Live
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="sticky top-[72px] z-10 flex items-center gap-3 px-2 bg-background-dark/95 backdrop-blur-md py-4 -mx-2 px-4 border-b border-white/5 mb-4">
           <h2 className="text-xl md:text-2xl font-bold tracking-tight">Recent Activity</h2>
           {activeTournaments.some(t => t.status === 'active') && (
             <span className="flex h-3 w-3 relative">
@@ -145,10 +397,17 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
                 <div key={tournament.id} className="flex flex-col bg-surface-dark rounded-xl md:rounded-2xl border border-border-dark overflow-hidden hover:shadow-2xl transition-all group">
                   <div className="h-32 md:h-48 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-t from-background-dark/90 to-transparent z-10"></div>
-                    <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Session" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5dwcSGR8c5Z1__pRS-y01S7qB_Ln3OmCYYN9ZuU7K6BC0urQ70ChbEfU2G66mqzDRudEQ8zItWO66B_B5nc7WS3SvqYUaXTP-HTNqH6HE7JGLh-Fyv4DpQPWoqlTVOf_Xvb67oH2BnzgwT5UrM5UeipxSrtgF3MsxgPL--Cu2ghNvuK4p6vkjwvP4oeYFL20A7yWMPGw-OSfPFKiAc5UFwbejpOdRnDPBw_hHFu2k-3CaBcIvS4_mBd5F_-pmyRkL_Z1Jp6iuZXs" />
-                    <div className="absolute top-3 left-3 z-20 flex gap-2">
+                    <img 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                      alt="Session" 
+                      src={getCoverImage(tournament.id)} 
+                    />
+                    <div className="absolute top-3 left-3 z-1 flex gap-2">
                       <span className="bg-primary text-background-dark text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded tracking-tighter uppercase">Court {displayMatch?.court || 1}</span>
                       {tournament.status === 'active' && <span className="bg-red-500 text-white text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase animate-pulse">Live</span>}
+                      {tournament.role === 'spectator' && (
+                        <span className="bg-white/10 backdrop-blur-md text-white text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase border border-white/20">Spectator</span>
+                      )}
                     </div>
                     <div className="absolute top-3 right-3 z-20">
                       <button 
@@ -160,10 +419,34 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
                     </div>
                     <div className="absolute bottom-3 left-3 z-20">
                       <p className="text-white text-sm md:text-lg font-bold truncate pr-4">{tournament.name}</p>
-                      <p className="text-primary text-[10px] md:text-sm font-medium">{tournament.type} • {tournament.courts} Crt</p>
+                      <p className="text-primary text-[10px] md:text-sm font-medium">
+                        {tournament.type} • {tournament.courts} Crt
+                        {tournament.courts === 1 && (
+                          <span className="ml-1.5 opacity-80 text-[9px] md:text-xs font-semibold">
+                            ({tournament.scoringMode === 'late' ? 'Late Scoring' : 'Live Scoring'})
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="p-4 md:p-6 flex flex-col gap-4">
+                    {tournament.isCloud && (
+                      <div className="flex gap-2">
+                        {tournament.role !== 'spectator' && (
+                          <button 
+                            onClick={() => onOpenAdmin(tournament.id)}
+                            className="flex-1 bg-surface-dark border border-primary/30 text-primary py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-sm hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-sm">settings_input_component</span>
+                            Admin
+                          </button>
+                        )}
+                        <div className="flex-1 bg-background-dark border border-white/5 rounded-lg md:rounded-xl flex flex-col items-center justify-center p-1">
+                          <span className="text-[8px] text-slate-500 font-bold uppercase">Shortcode</span>
+                          <span className="text-xs font-black text-primary tracking-widest">{tournament.shortcode}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center bg-background-dark/50 p-3 rounded-lg md:rounded-xl border border-border-dark">
                       <div className="flex flex-col items-center flex-1 min-w-0">
                         <p className="text-[8px] md:text-[10px] text-slate-500 font-bold uppercase truncate w-full text-center">{teamAName}</p>
@@ -177,9 +460,9 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
                     </div>
                     <button 
                       onClick={() => onResume(tournament.id)}
-                      className="w-full bg-primary text-background-dark py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-sm hover:brightness-110 transition-all"
+                      className={`w-full py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-sm transition-all ${tournament.role === 'spectator' ? 'bg-surface-dark border border-white/10 text-white hover:bg-white/5' : 'bg-primary text-background-dark hover:brightness-110'}`}
                     >
-                      {tournament.status === 'active' ? 'Resume Match' : 'Review Stats'}
+                      {tournament.role === 'spectator' ? 'Live Match' : (tournament.status === 'active' ? 'Resume Match' : 'Review Stats')}
                     </button>
                   </div>
                 </div>
@@ -189,7 +472,32 @@ const Dashboard: React.FC<DashboardProps> = ({ activeTournaments, onResume, onSt
         )}
       </div>
 
-      <DeleteModal isOpen={!!deleteId} onClose={() => { setDeleteId(null); setDeleteError(''); }} onConfirm={handleDeleteConfirm} error={deleteError} />
+      <DeleteModal 
+        isOpen={!!deleteId} 
+        onClose={() => { setDeleteId(null); setDeleteError(''); }} 
+        onConfirm={handleDeleteConfirm} 
+        isSpectator={activeTournaments.find(t => t.id === deleteId)?.role === 'spectator'}
+        error={deleteError} 
+      />
+
+      <LoginModal 
+        isOpen={showLogin}
+        onClose={() => { setShowLogin(false); setLoginError(''); }}
+        onConfirm={handleLoginConfirm}
+        error={loginError}
+      />
+
+      <ReclubImportModal 
+        isOpen={showReclubModal}
+        onClose={() => setShowReclubModal(false)}
+        onImport={(players, eventName) => {
+          if (onImportReclub) {
+            onImportReclub(players as any, eventName);
+          } else {
+            onStartNew();
+          }
+        }}
+      />
     </div>
   );
 };

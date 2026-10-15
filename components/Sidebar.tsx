@@ -10,8 +10,9 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
   const navItems = [
     { id: 'dashboard', label: 'Home', icon: 'dashboard' },
-    { id: 'setup', label: 'Setup', icon: 'trophy' },
-    { id: 'leaderboard', label: 'Stats', icon: 'analytics' },
+    { id: 'setup', label: 'Tournaments', icon: 'trophy' },
+    { id: 'leaderboard', label: 'Statistics', icon: 'analytics' },
+    { id: 'shortcode', label: 'Live Match', icon: 'sensors' },
   ];
 
   return (
@@ -47,7 +48,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
                   {item.icon}
                 </span>
                 <span className={`text-sm ${currentView === item.id ? 'font-semibold' : 'font-medium'}`}>
-                  {item.id === 'dashboard' ? 'Dashboard' : item.id === 'setup' ? 'Tournaments' : 'Statistics'}
+                  {item.id === 'dashboard' ? 'Dashboard' : 
+                   item.id === 'setup' ? 'Tournaments' : 
+                   item.id === 'leaderboard' ? 'Statistics' : 
+                   item.id === 'superadmin' ? 'Super Admin' :
+                   'Live Match'}
                 </span>
               </button>
             ))}

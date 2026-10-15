@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Player, Gender, GameType, ScoringFormat, TennisRule, CustomMatchType, Club } from '../types';
+import { Player, Gender, GameType, ScoringFormat, ScoringMode, TennisRule, CustomMatchType, Club } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
+import { supabase } from '../lib/supabase';
+import ReclubImportModal from './ReclubImportModal';
 import { 
   ChevronDown, 
   Users, 
@@ -23,6 +25,9 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface TournamentSetupProps {
   onStart: (config: any) => void;
+  initialPlayers?: Player[];
+  initialName?: string;
+  onExit?: () => void;
 }
 
 const GAME_CATEGORIES = [
@@ -46,20 +51,60 @@ const GAME_CATEGORIES = [
     icon: <Building2 className="size-4" />,
     description: 'Inter-club battle for ultimate bragging rights.',
     types: ['Club Americano', 'Club Mexicano', 'Club Fix Americano'] as GameType[]
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    icon: <Trophy className="size-4" />,
+    description: 'Elite knockout tournament with fixed partners.',
+    types: ['Professional Tournament'] as GameType[]
   }
 ];
 
-const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
-  const [name, setName] = useState('New Padel Cup');
+const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlayers, initialName, onExit }) => {
+  const [name, setName] = useState(initialName || 'New Padel Cup');
   const [type, setType] = useState<GameType>('Americano');
-  const [activeCategory, setActiveCategory] = useState<'americano' | 'mexicano' | 'club'>('americano');
+  const [activeCategory, setActiveCategory] = useState<'americano' | 'mexicano' | 'club' | 'professional'>('americano');
   const [scoring, setScoring] = useState<ScoringFormat>('Rally Points');
   const [customMatchType, setCustomMatchType] = useState<CustomMatchType>('Race to');
   const [tennisRule, setTennisRule] = useState<TennisRule>('Advantage');
   const [maxPoints, setMaxPoints] = useState(21);
   const [targetGames, setTargetGames] = useState(4);
   const [courts, setCourts] = useState(1);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [scoringMode, setScoringMode] = useState<ScoringMode>('live');
+  const [isCloud, setIsCloud] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [shortcode, setShortcode] = useState('');
+  const [availableShortcodes, setAvailableShortcodes] = useState<string[]>([]);
+  const [players, setPlayers] = useState<Player[]>(initialPlayers || []);
+  const [showReclubModal, setShowReclubModal] = useState(false);
+
+  useEffect(() => {
+    if (initialPlayers && initialPlayers.length > 0) {
+      setPlayers(initialPlayers);
+    }
+  }, [initialPlayers]);
+
+  useEffect(() => {
+    if (initialName) {
+      setName(initialName);
+    }
+  }, [initialName]);
+
+  useEffect(() => {
+    if (isCloud) {
+      fetch('/api/shortcodes/available')
+        .then(res => res.json())
+        .then(data => {
+          setAvailableShortcodes(data);
+          if (data.length > 0 && !shortcode) {
+            setShortcode(data[0]);
+          }
+        })
+        .catch(err => console.error("Failed to fetch shortcodes", err));
+    }
+  }, [isCloud]);
+
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerGender, setNewPlayerGender] = useState<Gender>('male');
   const [clubs, setClubs] = useState<Club[]>([
@@ -84,7 +129,8 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
     'Mexicano Fix': 'Fixed partners for the entire session. Teams are paired based on their total Power Ranking.',
     'Club Americano': 'Random partners within the same club. Matches are always Club vs Club. Partners rotate.',
     'Club Mexicano': 'Power Ranking pairing within the club. Matches are always Club vs Club.',
-    'Club Fix Americano': 'Fixed partners within the club. Matches are always Club vs Club.'
+    'Club Fix Americano': 'Fixed partners within the club. Matches are always Club vs Club.',
+    'Professional Tournament': 'Knockout system with fixed partners. Bracket-style progression from Round of 16 to Final.'
   };
 
   const scoringDescriptions: Record<ScoringFormat, string> = {
@@ -170,7 +216,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
     (!isFix || isFixValid) &&
     (!isClubMatch || (isClubBalanced && (!isFix || isClubFixValid)));
 
-  const handleFinalStart = () => {
+  const handleFinalStart = async () => {
     if (players.length < 4) {
       alert("Need at least 4 players for a match!");
       return;
@@ -208,16 +254,55 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
       }
     }
 
+    const tournamentId = Math.random().toString(36).substr(2, 9);
+
+    if (isCloud) {
+      setIsSaving(true);
+      try {
+        const { error } = await supabase
+          .from('tournaments')
+          .insert({
+            id: tournamentId,
+            name,
+            type,
+            shortcode,
+            scoring: finalScoring,
+            status: 'live',
+            courts,
+            players: players.map(p => ({
+              ...p,
+              points: 0,
+              matchesPlayed: 0,
+              wins: 0,
+              winRate: 0
+            })),
+            created_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+      } catch (error) {
+        console.error("Failed to save tournament to cloud:", error);
+        alert("Failed to create cloud tournament. Please check your connection and try again.");
+        setIsSaving(false);
+        return;
+      }
+      setIsSaving(false);
+    }
+
     onStart({ 
+      id: tournamentId,
       name, 
       type, 
       scoring: finalScoring, 
+      scoringMode: courts === 1 ? scoringMode : 'late',
       customMatchType: finalScoring === 'Custom Match' ? finalCustomType : undefined,
       tennisRule, 
       maxPoints: scoring === 'Rally Points' ? maxPoints : targetGames, 
       courts, 
       players,
-      clubs: isClubMatch ? clubs : undefined
+      clubs: isClubMatch ? clubs : undefined,
+      isCloud,
+      shortcode: isCloud ? shortcode : undefined
     });
   };
 
@@ -247,10 +332,53 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
         {/* Left Section: Config */}
         <section className="w-full lg:w-1/2 p-6 md:p-8 border-b lg:border-b-0 lg:border-r border-border-dark overflow-y-auto custom-scrollbar shrink-0">
           <div className="max-w-md mx-auto space-y-10">
+            <div className="space-y-4 p-4 bg-primary/5 border border-primary/10 rounded-2xl">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-primary/70 flex items-center gap-2">
+                  <Zap className="size-3" /> Cloud Connectivity
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Real-time Broadcaster</span>
+                  <button 
+                    onClick={() => setIsCloud(!isCloud)}
+                    className={`w-10 h-5 rounded-full transition-all relative ${isCloud ? 'bg-primary' : 'bg-white/10'}`}
+                  >
+                    <div className={`absolute top-1 size-3 rounded-full bg-white transition-all ${isCloud ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+              {isCloud && (
+                <div className="relative group animate-in slide-in-from-top-2 duration-300">
+                  {availableShortcodes.length > 0 ? (
+                    <select 
+                      value={shortcode}
+                      onChange={e => setShortcode(e.target.value)}
+                      className="w-full h-14 bg-background-dark border border-primary/30 rounded-xl px-6 text-white text-sm font-bold focus:border-primary transition-all appearance-none"
+                    >
+                      {availableShortcodes.map(code => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      value={shortcode}
+                      onChange={e => setShortcode(e.target.value.toUpperCase())}
+                      className="w-full h-14 bg-background-dark border border-primary/30 rounded-xl px-6 text-white text-sm font-bold focus:border-primary transition-all placeholder:text-slate-700" 
+                      placeholder="Enter Shortcode (e.g. PADEL24)" 
+                      maxLength={20}
+                    />
+                  )}
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-primary/50 pointer-events-none">
+                    <span className="material-symbols-outlined text-lg">cloud_sync</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-primary/70 flex items-center gap-2">
-                  <Target className="size-3" /> Match Title
+                  <Trophy className="size-3" /> Tournament Name
                 </label>
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Step 01/04</span>
               </div>
@@ -494,6 +622,78 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
               </div>
             </div>
 
+            {/* 1-Court Scoring Mode Selector (Live vs Late Scoring) */}
+            {courts === 1 ? (
+              <div className="space-y-2 p-3.5 bg-surface-dark/40 border border-primary/20 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-primary">scoreboard</span>
+                    1-Court Scoring Method
+                  </label>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                    {scoringMode === 'live' ? 'Live Point-by-Point' : 'Late Scoring (Modal)'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScoringMode('live')}
+                    className={`flex flex-col p-3 rounded-xl border text-left transition-all relative overflow-hidden group ${
+                      scoringMode === 'live'
+                        ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(0,255,204,0.15)]'
+                        : 'bg-surface-dark border-border-dark hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-6 rounded-lg flex items-center justify-center ${scoringMode === 'live' ? 'bg-primary text-background-dark' : 'bg-white/5 text-slate-400'}`}>
+                          <span className="material-symbols-outlined text-sm">sensors</span>
+                        </div>
+                        <span className={`text-xs font-black uppercase ${scoringMode === 'live' ? 'text-primary' : 'text-white'}`}>Live Scoring</span>
+                      </div>
+                      <div className={`size-4 rounded-full border flex items-center justify-center transition-all ${scoringMode === 'live' ? 'bg-primary border-primary text-background-dark' : 'border-white/10 text-transparent'}`}>
+                        <Check className="size-2.5 font-black" />
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-slate-400 leading-tight">
+                      Point-by-point realtime scoreboard. Remote Bluetooth keyboard & iPad ready.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScoringMode('late')}
+                    className={`flex flex-col p-3 rounded-xl border text-left transition-all relative overflow-hidden group ${
+                      scoringMode === 'late'
+                        ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(0,255,204,0.15)]'
+                        : 'bg-surface-dark border-border-dark hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-6 rounded-lg flex items-center justify-center ${scoringMode === 'late' ? 'bg-primary text-background-dark' : 'bg-white/5 text-slate-400'}`}>
+                          <span className="material-symbols-outlined text-sm">edit_square</span>
+                        </div>
+                        <span className={`text-xs font-black uppercase ${scoringMode === 'late' ? 'text-primary' : 'text-white'}`}>Late Scoring</span>
+                      </div>
+                      <div className={`size-4 rounded-full border flex items-center justify-center transition-all ${scoringMode === 'late' ? 'bg-primary border-primary text-background-dark' : 'border-white/10 text-transparent'}`}>
+                        <Check className="size-2.5 font-black" />
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-slate-400 leading-tight">
+                      Score Control Modal (seperti mode 2+ court). Update skor setelah pertandingan.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-surface-dark/40 border border-white/5 rounded-2xl text-slate-400 text-[10px]">
+                <Info className="size-3.5 text-primary shrink-0" />
+                <span>Multi-court ({courts} Courts) automatically uses Late Scoring via Score Control Modal per court.</span>
+              </div>
+            )}
+
             {/* Match Preview Visualization */}
             <div className="pt-6 border-t border-border-dark space-y-4">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
@@ -516,6 +716,11 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
                     </div>
                     <div className="h-px flex-1 bg-white/5"></div>
                     <span className="text-[10px] font-black text-primary uppercase">Court 1</span>
+                    {courts === 1 && (
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${scoringMode === 'live' ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-blue-500/10 border-blue-500/30 text-blue-400'}`}>
+                        {scoringMode === 'live' ? 'Live Scoring' : 'Late Scoring'}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -610,21 +815,37 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
                 <h2 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 flex items-center gap-2">
                   <Users className="size-3" /> Player Roster ({players.length})
                 </h2>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Step 04/04</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Step 04/04</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowReclubModal(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider active:scale-95 shadow-sm"
+                    title="Ambil nama pemain dari tautan Reclub"
+                  >
+                    <span className="material-symbols-outlined text-xs">link</span>
+                    <span>Import Reclub</span>
+                  </button>
+                </div>
               </div>
               
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <div className="flex-1 flex flex-col gap-3">
                     <div className="relative">
-                      <input 
+                      <textarea 
                         value={newPlayerName}
                         onChange={e => setNewPlayerName(e.target.value)}
-                        onKeyPress={e => e.key === 'Enter' && addPlayer()}
-                        className="w-full h-14 bg-background-dark border border-border-dark rounded-xl px-4 text-white focus:border-primary transition-all text-sm font-bold" 
+                        onKeyPress={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            addPlayer();
+                          }
+                        }}
+                        className="w-full min-h-[80px] bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white focus:border-primary transition-all text-sm font-bold resize-none" 
                         placeholder="Player name..." 
                       />
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600">
+                      <div className="absolute right-4 top-4 text-slate-600">
                         <UserPlus className="size-4" />
                       </div>
                     </div>
@@ -697,11 +918,11 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
                                   <span className="text-[8px] text-white font-black">{p.gender === 'male' ? 'M' : 'F'}</span>
                                 </div>
                               </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-sm text-white">{p.name}</span>
+                              <div className="flex flex-col gap-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-sm text-white break-words">{p.name}</span>
                                   {playerClub && (
-                                    <span className="text-[8px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black uppercase tracking-tighter border border-primary/20">
+                                    <span className="text-[8px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black uppercase tracking-tighter border border-primary/20 shrink-0">
                                       {playerClub.name}
                                     </span>
                                   )}
@@ -740,19 +961,28 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
             <div className="relative mt-6 mb-6 lg:mt-8 lg:mb-0">
               <button 
                 onClick={handleFinalStart}
-                disabled={!canStart}
-                className={`w-full h-20 rounded-2xl font-black uppercase tracking-widest text-xl transition-all relative overflow-hidden group ${canStart ? 'bg-primary text-background-dark hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_50px_rgba(0,255,204,0.3)]' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none'}`}
+                disabled={!canStart || isSaving}
+                className={`w-full h-20 rounded-2xl font-black uppercase tracking-widest text-xl transition-all relative overflow-hidden group ${canStart && !isSaving ? 'bg-primary text-background-dark hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_50px_rgba(0,255,204,0.3)]' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none'}`}
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
                 <span className="relative z-10 flex items-center justify-center gap-3">
-                  {players.length < 4 ? <UserPlus className="size-6" /> : <Trophy className="size-6" />}
-                  {players.length < 4 ? 'Add Players' : 
-                   (isClubMatch && !isClubBalanced) ? 'Balance Clubs' :
-                   (type === 'Club Fix Americano' && !isClubFixValid) ? 'Even Pairs' :
-                   (isFix && !isClubMatch && !isFixValid) ? 'Need 4, 8, 12...' : 
-                   (isMexicano && isOdd) ? 'Fix Pairs' : 
-                   ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) ? 'Balance Gender' : 
-                   'Initialize Tournament'}
+                  {isSaving ? (
+                    <>
+                      <div className="size-6 border-4 border-background-dark/20 border-t-background-dark rounded-full animate-spin" />
+                      Saving to Cloud...
+                    </>
+                  ) : (
+                    <>
+                      {players.length < 4 ? <UserPlus className="size-6" /> : <Trophy className="size-6" />}
+                      {players.length < 4 ? 'Add Players' : 
+                       (isClubMatch && !isClubBalanced) ? 'Balance Clubs' :
+                       (type === 'Club Fix Americano' && !isClubFixValid) ? 'Even Pairs' :
+                       (isFix && !isClubMatch && !isFixValid) ? 'Need 4, 8, 12...' : 
+                       (isMexicano && isOdd) ? 'Fix Pairs' : 
+                       ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) ? 'Balance Gender' : 
+                       'Initialize Tournament'}
+                    </>
+                  )}
                 </span>
               </button>
               
@@ -769,6 +999,30 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart }) => {
           </div>
         </section>
       </div>
+
+      <ReclubImportModal
+        isOpen={showReclubModal}
+        onClose={() => setShowReclubModal(false)}
+        onImport={(imported, eventName) => {
+          if (imported && imported.length > 0) {
+            setPlayers(imported.map((p, idx) => ({
+              id: p.id,
+              name: p.name,
+              gender: p.gender,
+              seed: idx + 1,
+              points: 0,
+              wins: 0,
+              matchesPlayed: 0,
+              winRate: 0,
+              avatarUrl: p.avatarUrl,
+              location: 'Reclub Event'
+            })));
+            if (eventName) {
+              setName(eventName);
+            }
+          }
+        }}
+      />
     </div>
   );
 };

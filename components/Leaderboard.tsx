@@ -1,6 +1,82 @@
 
 import React, { useState } from 'react';
-import { Tournament, Gender } from '../types';
+import { Tournament, Gender, Player, MatchHistoryEntry } from '../types';
+import TournamentBracket from './TournamentBracket';
+
+interface ScoreDetailModalProps {
+  player: Player;
+  onClose: () => void;
+}
+
+const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, onClose }) => {
+  const totalPoints = player.matchHistory?.reduce((sum, entry) => sum + (typeof entry.score_us === 'number' ? entry.score_us : 0), 0) || 0;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-background-dark/95 backdrop-blur-xl animate-in fade-in duration-300">
+      <div className="w-full max-w-lg bg-surface-dark border border-primary/20 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-4">
+            <img src={player.avatarUrl} className="size-12 rounded-xl border border-white/10" alt={player.name} />
+            <div>
+              <h2 className="text-lg font-black uppercase italic text-white">{player.name}</h2>
+              <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Score History</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="size-10 flex items-center justify-center rounded-full bg-white/5 text-slate-500 hover:text-white transition-colors">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="p-6 bg-primary/5 border-b border-white/5 shrink-0">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Points Earned</p>
+            <p className="text-2xl font-black text-primary italic">{totalPoints}</p>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+          {!player.matchHistory || player.matchHistory.length === 0 ? (
+            <div className="py-12 text-center">
+              <span className="material-symbols-outlined text-4xl text-slate-600 mb-2">history</span>
+              <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">No match history yet</p>
+            </div>
+          ) : (
+            [...player.matchHistory].reverse().map((entry, idx) => (
+              <div key={entry.matchId + idx} className="p-4 rounded-xl bg-background-dark border border-white/5 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${entry.result === 'Win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                      {entry.result}
+                    </span>
+                    <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{entry.type}</span>
+                  </div>
+                  <p className="text-xs font-bold text-white truncate">vs {entry.opponent}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-lg font-black text-white italic">
+                    {entry.score_us} - {entry.score_them}
+                  </p>
+                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">
+                    {new Date(entry.date).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="p-6 border-t border-white/5 shrink-0">
+          <button 
+            onClick={onClose}
+            className="w-full h-14 bg-surface-dark border border-white/10 text-white font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-all text-xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface LeaderboardProps {
   tournament: Tournament;
@@ -8,20 +84,24 @@ interface LeaderboardProps {
   onEnd: () => void;
   onUpdatePlayerName: (playerId: string, newName: string) => void;
   onAddPlayer: (name: string, gender: Gender) => void;
+  onExit?: () => void;
 }
 
-const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, onUpdatePlayerName, onAddPlayer }) => {
+const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, onUpdatePlayerName, onAddPlayer, onExit }) => {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newGender, setNewGender] = useState<Gender>('male');
   const [leaderboardType, setLeaderboardType] = useState<'individual' | 'club'>(tournament.clubs ? 'club' : 'individual');
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const isClubMatch = tournament.type.startsWith('Club');
 
   const sortedPlayers = [...tournament.players].sort((a, b) => b.points - a.points);
   
+  const isProfessional = tournament.type === 'Professional Tournament';
+
   const clubStats = tournament.clubs?.map(club => {
     const clubPlayers = tournament.players.filter(p => p.clubId === club.id);
     const totalPoints = clubPlayers.reduce((sum, p) => sum + p.points, 0);
@@ -75,6 +155,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
     <div className="flex flex-col h-full bg-background-dark overflow-y-auto">
       <header className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-background-dark/80 backdrop-blur-md px-4 md:px-10 py-3 md:py-4 shrink-0">
         <div className="flex items-center gap-3 md:gap-6">
+          {onExit && (
+            <button 
+              onClick={onExit} 
+              className="size-9 md:size-12 flex items-center justify-center rounded-lg md:rounded-xl bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all"
+            >
+              <span className="material-symbols-outlined text-lg">home</span>
+            </button>
+          )}
           <div className="flex items-center gap-2 md:gap-3">
             <div className="size-8 md:size-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
               <span className="material-symbols-outlined fill-1 text-sm md:text-base">sports_tennis</span>
@@ -217,8 +305,18 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
 
         {/* Table/List section */}
         <section className="flex-1 flex flex-col min-w-0 lg:overflow-y-auto custom-scrollbar pb-20 lg:pb-0">
+          {isProfessional && tournament.bracket ? (
+            <div className="mb-8">
+              <div className="flex flex-col gap-1 md:gap-2 mb-6">
+                <h2 className="text-xl md:text-3xl font-black tracking-tight text-white uppercase italic leading-none">Tournament Bracket</h2>
+                <p className="text-[#9abcb5] text-[10px] md:text-sm">Knockout progression to the championship.</p>
+              </div>
+              <TournamentBracket bracket={tournament.bracket} players={tournament.players} />
+            </div>
+          ) : null}
+
           {isClubMatch && (
-            <div className="flex gap-2 mb-4 p-1 bg-surface-dark rounded-xl border border-white/5 w-fit">
+            <div className="sticky top-[72px] z-40 flex gap-2 mb-4 p-1 bg-surface-dark/90 backdrop-blur-md rounded-xl border border-white/5 w-fit">
               <button 
                 onClick={() => setLeaderboardType('club')}
                 className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${leaderboardType === 'club' ? 'bg-primary text-background-dark' : 'text-slate-500 hover:text-white'}`}
@@ -237,7 +335,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
           <div className="bg-surface-dark rounded-xl md:rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
-                <thead>
+                <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm">
                   <tr className="bg-white/5 border-b border-white/10">
                     <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
                     <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -246,7 +344,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                     <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">
                       {leaderboardType === 'individual' ? 'W-L' : 'Match Wins'}
                     </th>
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Points</th>
+                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
+                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -261,7 +360,42 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                             <img src={player.avatarUrl} className="size-8 md:size-10 rounded-lg border border-white/10" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 group/name">
-                                <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
+                                {editingPlayerId === player.id ? (
+                                  <input
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onBlur={() => {
+                                      if (editValue.trim() && editValue !== player.name) {
+                                        onUpdatePlayerName(player.id, editValue.trim());
+                                      }
+                                      setEditingPlayerId(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        if (editValue.trim() && editValue !== player.name) {
+                                          onUpdatePlayerName(player.id, editValue.trim());
+                                        }
+                                        setEditingPlayerId(null);
+                                      }
+                                      if (e.key === 'Escape') setEditingPlayerId(null);
+                                    }}
+                                    className="bg-white/10 border border-primary/50 rounded px-2 py-0.5 text-white font-bold text-xs md:text-sm w-full outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                ) : (
+                                  <>
+                                    <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
+                                    <button 
+                                      onClick={() => {
+                                        setEditingPlayerId(player.id);
+                                        setEditValue(player.name);
+                                      }}
+                                      className="opacity-0 group-hover/name:opacity-100 transition-opacity p-1 hover:text-primary"
+                                    >
+                                      <span className="material-symbols-outlined text-xs">edit</span>
+                                    </button>
+                                  </>
+                                )}
                                 {player.clubId && (
                                   <span className="text-[8px] bg-white/5 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase">
                                     {tournament.clubs?.find(c => c.id === player.clubId)?.name}
@@ -275,9 +409,21 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                           <span className="text-xs font-bold text-slate-300">{player.wins}-{player.matchesPlayed - player.wins}</span>
                         </td>
                         <td className="px-4 md:px-6 py-4 text-right">
-                          <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
-                            {player.points}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
+                              {player.points}
+                            </span>
+                            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
+                          </div>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 text-right">
+                          <button 
+                            onClick={() => setSelectedPlayer(player)}
+                            className="size-8 md:size-10 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/50 flex items-center justify-center transition-all"
+                            title="View Details"
+                          >
+                            <span className="material-symbols-outlined text-lg">analytics</span>
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -302,9 +448,12 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                           <span className="text-xs font-bold text-slate-300">{club.wins}</span>
                         </td>
                         <td className="px-4 md:px-6 py-4 text-right">
-                          <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
-                            {club.points}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
+                              {club.points}
+                            </span>
+                            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -315,6 +464,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
           </div>
         </section>
       </main>
+
+      {selectedPlayer && (
+        <ScoreDetailModal 
+          player={selectedPlayer} 
+          onClose={() => setSelectedPlayer(null)} 
+        />
+      )}
     </div>
   );
 };
