@@ -196,6 +196,65 @@ export const shuffle = <T>(array: T[]): T[] => {
   return result;
 };
 
+/**
+ * Count how many times playerA and playerB have played together as partners
+ */
+export const countPreviousPartnerships = (
+  playerAId: string,
+  playerBId: string,
+  previousMatches: Match[]
+): number => {
+  let count = 0;
+  for (const m of previousMatches) {
+    if (
+      (m.teamA.playerIds.includes(playerAId) && m.teamA.playerIds.includes(playerBId)) ||
+      (m.teamB.playerIds.includes(playerAId) && m.teamB.playerIds.includes(playerBId))
+    ) {
+      count++;
+    }
+  }
+  return count;
+};
+
+/**
+ * Count how many times playerA and playerB have played against each other as opponents
+ */
+export const countPreviousRivalries = (
+  playerAId: string,
+  playerBId: string,
+  previousMatches: Match[]
+): number => {
+  let count = 0;
+  for (const m of previousMatches) {
+    if (
+      (m.teamA.playerIds.includes(playerAId) && m.teamB.playerIds.includes(playerBId)) ||
+      (m.teamB.playerIds.includes(playerAId) && m.teamA.playerIds.includes(playerBId))
+    ) {
+      count++;
+    }
+  }
+  return count;
+};
+
+/**
+ * Check if two fixed teams have already played against each other
+ */
+export const haveFixedTeamsPlayed = (
+  teamAPlayerIds: string[],
+  teamBPlayerIds: string[],
+  previousMatches: Match[]
+): boolean => {
+  return previousMatches.some(m => {
+    const isAvsB = 
+      teamAPlayerIds.every(id => m.teamA.playerIds.includes(id)) &&
+      teamBPlayerIds.every(id => m.teamB.playerIds.includes(id));
+    const isBvsA = 
+      teamAPlayerIds.every(id => m.teamB.playerIds.includes(id)) &&
+      teamBPlayerIds.every(id => m.teamA.playerIds.includes(id));
+    return isAvsB || isBvsA;
+  });
+};
+
 export const generateRandomRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
   const shuffled = shuffle(players);
   const matches: Match[] = [];
@@ -215,28 +274,91 @@ export const generateRandomRound = (players: Player[], courts: number, roundNumb
   return matches;
 };
 
-export const generateMexicanoRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
-  // Sort players by points descending, then by winRate descending
+export const generateMexicanoRound = (
+  players: Player[], 
+  courts: number, 
+  roundNumber: number,
+  previousMatches: Match[] = []
+): Match[] => {
+  // Sort players by points descending, then winRate descending, then wins, then seed
   const sortedPlayers = [...players].sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    return b.winRate - a.winRate;
+    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return a.seed - b.seed;
   });
   
-  const matches: Match[] = [];
   const maxMatches = Math.min(courts, Math.floor(sortedPlayers.length / 4));
+  if (maxMatches <= 0) return [];
+
+  const neededPlayers = maxMatches * 4;
+  let activePlayers: Player[] = [];
+
+  // Fair Bench Rotation if we have more players than court capacity
+  if (sortedPlayers.length > neededPlayers) {
+    const pool = [...sortedPlayers];
+    pool.sort((a, b) => {
+      if ((a.matchesPlayed || 0) !== (b.matchesPlayed || 0)) {
+        return (a.matchesPlayed || 0) - (b.matchesPlayed || 0);
+      }
+      return b.points - a.points;
+    });
+    const selected = pool.slice(0, neededPlayers);
+    activePlayers = selected.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return a.seed - b.seed;
+    });
+  } else {
+    activePlayers = sortedPlayers.slice(0, neededPlayers);
+  }
+
+  const matches: Match[] = [];
 
   for (let i = 0; i < maxMatches; i++) {
     const offset = i * 4;
-    const p1 = sortedPlayers[offset];
-    const p2 = sortedPlayers[offset + 1];
-    const p3 = sortedPlayers[offset + 2];
-    const p4 = sortedPlayers[offset + 3];
+    const p1 = activePlayers[offset];
+    const p2 = activePlayers[offset + 1];
+    const p3 = activePlayers[offset + 2];
+    const p4 = activePlayers[offset + 3];
 
-    // Standard Mexicano pairing for a court: (1 & 4) vs (2 & 3)
+    // Three pairing options per court:
+    // Option 1 (Formula Standar Kompetitif): (1 + 4) vs (2 + 3)
+    // Option 2 (Alternatif Balance): (1 + 3) vs (2 + 4)
+    // Option 3 (Alternatif Top vs Low): (1 + 2) vs (3 + 4)
+    const options = [
+      {
+        teamA: [p1, p4],
+        teamB: [p2, p3],
+        partnerPenalty: countPreviousPartnerships(p1.id, p4.id, previousMatches) + countPreviousPartnerships(p2.id, p3.id, previousMatches),
+        preference: 1
+      },
+      {
+        teamA: [p1, p3],
+        teamB: [p2, p4],
+        partnerPenalty: countPreviousPartnerships(p1.id, p3.id, previousMatches) + countPreviousPartnerships(p2.id, p4.id, previousMatches),
+        preference: 2
+      },
+      {
+        teamA: [p1, p2],
+        teamB: [p3, p4],
+        partnerPenalty: countPreviousPartnerships(p1.id, p2.id, previousMatches) + countPreviousPartnerships(p3.id, p4.id, previousMatches),
+        preference: 3
+      }
+    ];
+
+    // Prioritize lowest partner penalty (repetition avoidance), then preference
+    options.sort((a, b) => {
+      if (a.partnerPenalty !== b.partnerPenalty) return a.partnerPenalty - b.partnerPenalty;
+      return a.preference - b.preference;
+    });
+
+    const chosen = options[0];
+
     matches.push({
       id: Math.random().toString(36).substr(2, 9),
-      teamA: { playerIds: [p1.id, p4.id], score: 0, sets: 0, games: 0 },
-      teamB: { playerIds: [p2.id, p3.id], score: 0, sets: 0, games: 0 },
+      teamA: { playerIds: [chosen.teamA[0].id, chosen.teamA[1].id], score: 0, sets: 0, games: 0 },
+      teamB: { playerIds: [chosen.teamB[0].id, chosen.teamB[1].id], score: 0, sets: 0, games: 0 },
       status: 'pending',
       court: i + 1,
       round: roundNumber
@@ -270,31 +392,54 @@ export const generateRandomMixRound = (players: Player[], courts: number, roundN
   return shuffle(matches).map((m, idx) => ({ ...m, court: idx + 1 }));
 };
 
-export const generateMexicanoMixRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
+export const generateMexicanoMixRound = (
+  players: Player[], 
+  courts: number, 
+  roundNumber: number,
+  previousMatches: Match[] = []
+): Match[] => {
   const males = [...players].filter(p => p.gender === 'male').sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    return b.winRate - a.winRate;
+    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+    return a.seed - b.seed;
   });
   const females = [...players].filter(p => p.gender === 'female').sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    return b.winRate - a.winRate;
+    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+    return a.seed - b.seed;
   });
 
-  const matches: Match[] = [];
   const maxMatches = Math.min(courts, Math.floor(Math.min(males.length, females.length) / 2));
+  const matches: Match[] = [];
 
   for (let i = 0; i < maxMatches; i++) {
     const offset = i * 2;
     const m1 = males[offset];
-    const f1 = females[offset];
     const m2 = males[offset + 1];
+    const f1 = females[offset];
     const f2 = females[offset + 1];
 
     if (m1 && f1 && m2 && f2) {
+      // Balanced Cross: Tim A: M1 + F2 vs Tim B: M2 + F1
+      // Alternatif: Tim A: M1 + F1 vs Tim B: M2 + F2
+      const opt1Penalty = countPreviousPartnerships(m1.id, f2.id, previousMatches) + countPreviousPartnerships(m2.id, f1.id, previousMatches);
+      const opt2Penalty = countPreviousPartnerships(m1.id, f1.id, previousMatches) + countPreviousPartnerships(m2.id, f2.id, previousMatches);
+
+      let teamAPlayers: [Player, Player];
+      let teamBPlayers: [Player, Player];
+
+      if (opt1Penalty <= opt2Penalty) {
+        teamAPlayers = [m1, f2];
+        teamBPlayers = [m2, f1];
+      } else {
+        teamAPlayers = [m1, f1];
+        teamBPlayers = [m2, f2];
+      }
+
       matches.push({
         id: Math.random().toString(36).substr(2, 9),
-        teamA: { playerIds: [m1.id, f1.id], score: 0, sets: 0, games: 0 },
-        teamB: { playerIds: [m2.id, f2.id], score: 0, sets: 0, games: 0 },
+        teamA: { playerIds: [teamAPlayers[0].id, teamAPlayers[1].id], score: 0, sets: 0, games: 0 },
+        teamB: { playerIds: [teamBPlayers[0].id, teamBPlayers[1].id], score: 0, sets: 0, games: 0 },
         status: 'pending',
         court: i + 1,
         round: roundNumber
@@ -384,10 +529,15 @@ export const generateAmericanoFixMatches = (players: Player[], rounds: number = 
   return matches;
 };
 
-export const generateMexicanoFixRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
+export const generateMexicanoFixRound = (
+  players: Player[], 
+  courts: number, 
+  roundNumber: number,
+  previousMatches: Match[] = []
+): Match[] => {
   const teams = generateFixedTeams(players);
   
-  // Sort teams by total points of players
+  // Sort teams by total points of players, then by average winRate
   const sortedTeams = [...teams].sort((a, b) => {
     const pointsA = a.p1.points + a.p2.points;
     const pointsB = b.p1.points + b.p2.points;
@@ -397,24 +547,69 @@ export const generateMexicanoFixRound = (players: Player[], courts: number, roun
     return winRateB - winRateA;
   });
 
-  const matches: Match[] = [];
   const maxMatches = Math.min(courts, Math.floor(sortedTeams.length / 2));
+  if (maxMatches <= 0) return [];
 
-  for (let i = 0; i < maxMatches; i++) {
-    const offset = i * 2;
-    const t1 = sortedTeams[offset];
-    const t2 = sortedTeams[offset + 1];
+  // Match teams by ranking proximity with rematch avoidance
+  const matchedPairs: { teamA: { p1: Player, p2: Player }, teamB: { p1: Player, p2: Player } }[] = [];
+  const teamList = [...sortedTeams];
 
-    if (t1 && t2) {
-      matches.push({
-        id: Math.random().toString(36).substr(2, 9),
-        teamA: { playerIds: [t1.p1.id, t1.p2.id], score: 0, sets: 0, games: 0 },
-        teamB: { playerIds: [t2.p1.id, t2.p2.id], score: 0, sets: 0, games: 0 },
-        status: 'pending',
-        court: i + 1,
-        round: roundNumber
-      });
+  let idx = 0;
+  while (idx < maxMatches * 2) {
+    if (idx + 1 >= teamList.length) break;
+
+    const t1 = teamList[idx];
+    const t2 = teamList[idx + 1];
+
+    const t1Ids = [t1.p1.id, t1.p2.id];
+    const t2Ids = [t2.p1.id, t2.p2.id];
+
+    const alreadyPlayed = haveFixedTeamsPlayed(t1Ids, t2Ids, previousMatches);
+
+    // If already played, attempt swap with adjacent pair (t3, t4)
+    if (alreadyPlayed && idx + 3 < teamList.length) {
+      const t3 = teamList[idx + 2];
+      const t4 = teamList[idx + 3];
+
+      const t3Ids = [t3.p1.id, t3.p2.id];
+      const t4Ids = [t4.p1.id, t4.p2.id];
+
+      // Option A: T1 vs T3 and T2 vs T4
+      const played13 = haveFixedTeamsPlayed(t1Ids, t3Ids, previousMatches);
+      const played24 = haveFixedTeamsPlayed(t2Ids, t4Ids, previousMatches);
+
+      // Option B: T1 vs T4 and T2 vs T3
+      const played14 = haveFixedTeamsPlayed(t1Ids, t4Ids, previousMatches);
+      const played23 = haveFixedTeamsPlayed(t2Ids, t3Ids, previousMatches);
+
+      if (!played13 && !played24) {
+        matchedPairs.push({ teamA: t1, teamB: t3 });
+        matchedPairs.push({ teamA: t2, teamB: t4 });
+        idx += 4;
+        continue;
+      } else if (!played14 && !played23) {
+        matchedPairs.push({ teamA: t1, teamB: t4 });
+        matchedPairs.push({ teamA: t2, teamB: t3 });
+        idx += 4;
+        continue;
+      }
     }
+
+    matchedPairs.push({ teamA: t1, teamB: t2 });
+    idx += 2;
+  }
+
+  const matches: Match[] = [];
+  for (let i = 0; i < Math.min(courts, matchedPairs.length); i++) {
+    const pair = matchedPairs[i];
+    matches.push({
+      id: Math.random().toString(36).substr(2, 9),
+      teamA: { playerIds: [pair.teamA.p1.id, pair.teamA.p2.id], score: 0, sets: 0, games: 0 },
+      teamB: { playerIds: [pair.teamB.p1.id, pair.teamB.p2.id], score: 0, sets: 0, games: 0 },
+      status: 'pending',
+      court: i + 1,
+      round: roundNumber
+    });
   }
   return matches;
 };
@@ -476,32 +671,8 @@ export const generateMatches = (players: Player[], type: GameType, rounds: numbe
   }
 
   if (type === 'Mexicano') {
-    // Mexicano: Fixed partners. Usually paired by rank (1-2, 3-4).
-    // For initial setup, we sort by seed then pair.
-    const sortedPlayers = [...players].sort((a, b) => a.seed - b.seed);
-    const teams: { p1: Player, p2: Player }[] = [];
-    for (let i = 0; i < sortedPlayers.length; i += 2) {
-      if (sortedPlayers[i] && sortedPlayers[i + 1]) {
-        teams.push({ p1: sortedPlayers[i], p2: sortedPlayers[i + 1] });
-      }
-    }
-
-    // Generate matches by shuffling the existing fixed teams
-    for (let r = 0; r < rounds; r++) {
-      const shuffledTeams = shuffle(teams);
-      for (let j = 0; j < Math.floor(shuffledTeams.length / 2); j++) {
-        const t1 = shuffledTeams[j * 2];
-        const t2 = shuffledTeams[j * 2 + 1];
-        matches.push({
-          id: Math.random().toString(36).substr(2, 9),
-          teamA: { playerIds: [t1.p1.id, t1.p2.id], score: 0, sets: 0, games: 0 },
-          teamB: { playerIds: [t2.p1.id, t2.p2.id], score: 0, sets: 0, games: 0 },
-          status: 'pending',
-          court: j + 1,
-          round: r + 1,
-        });
-      }
-    }
+    // Mexicano: Round 1 is randomized draw
+    return generateRandomRound(players, 99, 1);
   } else if (type === 'Americano Fix') {
     return generateAmericanoFixMatches(players, rounds);
   } else if (type === 'Mexicano Fix') {

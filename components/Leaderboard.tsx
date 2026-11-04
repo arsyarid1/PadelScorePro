@@ -95,10 +95,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
   const [newGender, setNewGender] = useState<Gender>('male');
   const [leaderboardType, setLeaderboardType] = useState<'individual' | 'club'>(tournament.clubs ? 'club' : 'individual');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [mixGenderTab, setMixGenderTab] = useState<'both' | 'male' | 'female'>('both');
 
   const isClubMatch = tournament.type.startsWith('Club');
+  const isMixMatch = tournament.type === 'Mexicano Mix' || tournament.type === 'Americano Mix';
 
-  const sortedPlayers = [...tournament.players].sort((a, b) => b.points - a.points);
+  const sortedPlayers = [...tournament.players].sort((a, b) => b.points - a.points || b.winRate - a.winRate);
+  const sortedMales = [...tournament.players].filter(p => p.gender === 'male').sort((a, b) => b.points - a.points || b.winRate - a.winRate);
+  const sortedFemales = [...tournament.players].filter(p => p.gender === 'female').sort((a, b) => b.points - a.points || b.winRate - a.winRate);
   
   const isProfessional = tournament.type === 'Professional Tournament';
 
@@ -151,6 +155,86 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
 
   const isTournamentActive = tournament.status === 'active';
 
+  const renderPlayerRows = (playersList: Player[]) => {
+    return playersList.map((player, idx) => (
+      <tr key={player.id} className="group hover:bg-primary/5 transition-colors">
+        <td className="px-4 md:px-6 py-4">
+          <span className={`text-base md:text-xl font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>{(idx + 1).toString().padStart(2, '0')}</span>
+        </td>
+        <td className="px-4 md:px-6 py-4">
+          <div className="flex items-center gap-3">
+            <img src={player.avatarUrl} className="size-8 md:size-10 rounded-lg border border-white/10" alt={player.name} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 group/name">
+                {editingPlayerId === player.id ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => {
+                      if (editValue.trim() && editValue !== player.name) {
+                        onUpdatePlayerName(player.id, editValue.trim());
+                      }
+                      setEditingPlayerId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (editValue.trim() && editValue !== player.name) {
+                          onUpdatePlayerName(player.id, editValue.trim());
+                        }
+                        setEditingPlayerId(null);
+                      }
+                      if (e.key === 'Escape') setEditingPlayerId(null);
+                    }}
+                    className="bg-white/10 border border-primary/50 rounded px-2 py-0.5 text-white font-bold text-xs md:text-sm w-full outline-none focus:ring-1 focus:ring-primary"
+                  />
+                ) : (
+                  <>
+                    <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
+                    <button 
+                      onClick={() => {
+                        setEditingPlayerId(player.id);
+                        setEditValue(player.name);
+                      }}
+                      className="opacity-0 group-hover/name:opacity-100 transition-opacity p-1 hover:text-primary"
+                    >
+                      <span className="material-symbols-outlined text-xs">edit</span>
+                    </button>
+                  </>
+                )}
+                {player.clubId && (
+                  <span className="text-[8px] bg-white/5 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase">
+                    {tournament.clubs?.find(c => c.id === player.clubId)?.name}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="px-4 md:px-6 py-4 text-center">
+          <span className="text-xs font-bold text-slate-300">{player.wins}-{player.matchesPlayed - player.wins}</span>
+        </td>
+        <td className="px-4 md:px-6 py-4 text-right">
+          <div className="flex flex-col items-end">
+            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
+              {player.points}
+            </span>
+            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
+          </div>
+        </td>
+        <td className="px-4 md:px-6 py-4 text-right">
+          <button 
+            onClick={() => setSelectedPlayer(player)}
+            className="size-8 md:size-10 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/50 flex items-center justify-center transition-all"
+            title="View Details"
+          >
+            <span className="material-symbols-outlined text-lg">analytics</span>
+          </button>
+        </td>
+      </tr>
+    ));
+  };
+
   return (
     <div className="flex flex-col h-full bg-background-dark overflow-y-auto">
       <header className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-background-dark/80 backdrop-blur-md px-4 md:px-10 py-3 md:py-4 shrink-0">
@@ -201,7 +285,12 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
             className="flex items-center justify-center h-9 md:h-12 px-3 md:px-6 rounded-lg md:rounded-xl bg-primary text-background-dark font-bold text-[10px] md:text-sm transition-transform active:scale-95 shadow-[0_0_15px_rgba(0,255,204,0.2)]"
           >
             <span className="material-symbols-outlined text-lg sm:mr-2">play_arrow</span>
-            <span className="hidden sm:inline">Next</span>
+            <span className="hidden sm:inline">
+              {tournament.matches.some(m => m.status === 'live') ? 'Active Match' : 'Next Round'}
+            </span>
+            <span className="sm:hidden">
+              {tournament.matches.some(m => m.status === 'live') ? 'Match' : 'Next'}
+            </span>
           </button>
         </div>
       </header>
@@ -332,136 +421,161 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
             </div>
           )}
 
-          <div className="bg-surface-dark rounded-xl md:rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
-                <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm">
-                  <tr className="bg-white/5 border-b border-white/10">
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      {leaderboardType === 'individual' ? 'Athlete' : 'Club'}
-                    </th>
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">
-                      {leaderboardType === 'individual' ? 'W-L' : 'Match Wins'}
-                    </th>
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
-                    <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {leaderboardType === 'individual' ? (
-                    sortedPlayers.map((player, idx) => (
-                      <tr key={player.id} className="group hover:bg-primary/5 transition-colors">
-                        <td className="px-4 md:px-6 py-4">
-                          <span className={`text-base md:text-xl font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>{(idx + 1).toString().padStart(2, '0')}</span>
-                        </td>
-                        <td className="px-4 md:px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <img src={player.avatarUrl} className="size-8 md:size-10 rounded-lg border border-white/10" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 group/name">
-                                {editingPlayerId === player.id ? (
-                                  <input
-                                    autoFocus
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    onBlur={() => {
-                                      if (editValue.trim() && editValue !== player.name) {
-                                        onUpdatePlayerName(player.id, editValue.trim());
-                                      }
-                                      setEditingPlayerId(null);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        if (editValue.trim() && editValue !== player.name) {
-                                          onUpdatePlayerName(player.id, editValue.trim());
-                                        }
-                                        setEditingPlayerId(null);
-                                      }
-                                      if (e.key === 'Escape') setEditingPlayerId(null);
-                                    }}
-                                    className="bg-white/10 border border-primary/50 rounded px-2 py-0.5 text-white font-bold text-xs md:text-sm w-full outline-none focus:ring-1 focus:ring-primary"
-                                  />
-                                ) : (
-                                  <>
-                                    <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
-                                    <button 
-                                      onClick={() => {
-                                        setEditingPlayerId(player.id);
-                                        setEditValue(player.name);
-                                      }}
-                                      className="opacity-0 group-hover/name:opacity-100 transition-opacity p-1 hover:text-primary"
-                                    >
-                                      <span className="material-symbols-outlined text-xs">edit</span>
-                                    </button>
-                                  </>
-                                )}
-                                {player.clubId && (
-                                  <span className="text-[8px] bg-white/5 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase">
-                                    {tournament.clubs?.find(c => c.id === player.clubId)?.name}
-                                  </span>
-                                )}
+          {isMixMatch && (
+            <div className="sticky top-[72px] z-40 flex flex-wrap gap-2 mb-4 p-1 bg-surface-dark/90 backdrop-blur-md rounded-xl border border-white/5 w-fit">
+              <button 
+                onClick={() => setMixGenderTab('both')}
+                className={`px-3 md:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${mixGenderTab === 'both' ? 'bg-primary text-background-dark shadow-sm' : 'text-slate-500 hover:text-white'}`}
+              >
+                Dua Tabel (Pria & Wanita)
+              </button>
+              <button 
+                onClick={() => setMixGenderTab('male')}
+                className={`px-3 md:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${mixGenderTab === 'male' ? 'bg-cyan-400 text-slate-950 shadow-sm' : 'text-slate-500 hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined text-xs">male</span>
+                <span>Pria ({sortedMales.length})</span>
+              </button>
+              <button 
+                onClick={() => setMixGenderTab('female')}
+                className={`px-3 md:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${mixGenderTab === 'female' ? 'bg-pink-400 text-slate-950 shadow-sm' : 'text-slate-500 hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined text-xs">female</span>
+                <span>Wanita ({sortedFemales.length})</span>
+              </button>
+            </div>
+          )}
+
+          {isMixMatch && mixGenderTab === 'both' ? (
+            <div className="space-y-6">
+              {/* Male Table */}
+              <div className="bg-surface-dark rounded-xl md:rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
+                <div className="px-4 md:px-6 py-3.5 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-cyan-400 text-lg">male</span>
+                    <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-white">Klasemen Pria (Male Ranking)</h3>
+                  </div>
+                  <span className="text-[9px] bg-cyan-400/10 text-cyan-400 border border-cyan-400/30 px-2 py-0.5 rounded font-black">
+                    {sortedMales.length} Pemain
+                  </span>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
+                    <thead className="bg-surface-dark/95 backdrop-blur-sm">
+                      <tr className="bg-white/5 border-b border-white/10">
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">Athlete</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">W-L</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {renderPlayerRows(sortedMales)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Female Table */}
+              <div className="bg-surface-dark rounded-xl md:rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
+                <div className="px-4 md:px-6 py-3.5 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-pink-400 text-lg">female</span>
+                    <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-white">Klasemen Wanita (Female Ranking)</h3>
+                  </div>
+                  <span className="text-[9px] bg-pink-400/10 text-pink-400 border border-pink-400/30 px-2 py-0.5 rounded font-black">
+                    {sortedFemales.length} Pemain
+                  </span>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
+                    <thead className="bg-surface-dark/95 backdrop-blur-sm">
+                      <tr className="bg-white/5 border-b border-white/10">
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">Athlete</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">W-L</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
+                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {renderPlayerRows(sortedFemales)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-surface-dark rounded-xl md:rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl">
+              {isMixMatch && (
+                <div className="px-4 md:px-6 py-3 bg-white/5 border-b border-white/10 flex items-center gap-2">
+                  <span className={`material-symbols-outlined text-lg ${mixGenderTab === 'male' ? 'text-cyan-400' : 'text-pink-400'}`}>
+                    {mixGenderTab === 'male' ? 'male' : 'female'}
+                  </span>
+                  <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-white">
+                    {mixGenderTab === 'male' ? 'Klasemen Pria (Male Ranking)' : 'Klasemen Wanita (Female Ranking)'}
+                  </h3>
+                </div>
+              )}
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
+                  <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm">
+                    <tr className="bg-white/5 border-b border-white/10">
+                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
+                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        {leaderboardType === 'individual' ? 'Athlete' : 'Club'}
+                      </th>
+                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">
+                        {leaderboardType === 'individual' ? 'W-L' : 'Match Wins'}
+                      </th>
+                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
+                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {leaderboardType === 'individual' ? (
+                      renderPlayerRows(
+                        isMixMatch 
+                          ? (mixGenderTab === 'male' ? sortedMales : sortedFemales)
+                          : sortedPlayers
+                      )
+                    ) : (
+                      clubStats.map((club, idx) => (
+                        <tr key={club.id} className="group hover:bg-primary/5 transition-colors">
+                          <td className="px-4 md:px-6 py-4">
+                            <span className={`text-base md:text-xl font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>{(idx + 1).toString().padStart(2, '0')}</span>
+                          </td>
+                          <td className="px-4 md:px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="size-8 md:size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
+                                {club.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{club.name}</p>
+                                <p className="text-[8px] text-slate-500 font-bold uppercase">{club.playerCount} Members</p>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 md:px-6 py-4 text-center">
-                          <span className="text-xs font-bold text-slate-300">{player.wins}-{player.matchesPlayed - player.wins}</span>
-                        </td>
-                        <td className="px-4 md:px-6 py-4 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
-                              {player.points}
-                            </span>
-                            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
-                          </div>
-                        </td>
-                        <td className="px-4 md:px-6 py-4 text-right">
-                          <button 
-                            onClick={() => setSelectedPlayer(player)}
-                            className="size-8 md:size-10 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/50 flex items-center justify-center transition-all"
-                            title="View Details"
-                          >
-                            <span className="material-symbols-outlined text-lg">analytics</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    clubStats.map((club, idx) => (
-                      <tr key={club.id} className="group hover:bg-primary/5 transition-colors">
-                        <td className="px-4 md:px-6 py-4">
-                          <span className={`text-base md:text-xl font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>{(idx + 1).toString().padStart(2, '0')}</span>
-                        </td>
-                        <td className="px-4 md:px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 md:size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
-                              {club.name.substring(0, 2).toUpperCase()}
+                          </td>
+                          <td className="px-4 md:px-6 py-4 text-center">
+                            <span className="text-xs font-bold text-slate-300">{club.wins}</span>
+                          </td>
+                          <td className="px-4 md:px-6 py-4 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
+                                {club.points}
+                              </span>
+                              <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{club.name}</p>
-                              <p className="text-[8px] text-slate-500 font-bold uppercase">{club.playerCount} Members</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 md:px-6 py-4 text-center">
-                          <span className="text-xs font-bold text-slate-300">{club.wins}</span>
-                        </td>
-                        <td className="px-4 md:px-6 py-4 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
-                              {club.points}
-                            </span>
-                            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       </main>
 

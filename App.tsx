@@ -534,9 +534,9 @@ const App: React.FC = () => {
     let updatedPlayers = tournament.players;
 
     // Calculate bonus points: 10 points for every match difference compared to the player with the most matches
-    // This logic is typically for Round Robin formats (Americano/Mexicano) to equalize points for players who played fewer matches.
-    // We exclude 'Professional Tournament' (Knockout) as match counts naturally vary there.
-    if (tournament.type !== 'Professional Tournament') {
+    // This logic is typically for Round Robin formats to equalize points for players who played fewer matches.
+    // Exclude 'Professional Tournament' and all Mexicano variants where scores are strictly performance-based.
+    if (tournament.type !== 'Professional Tournament' && !tournament.type.includes('Mexicano')) {
       const maxMatches = Math.max(...tournament.players.map(p => p.matchesPlayed), 0);
       updatedPlayers = tournament.players.map(p => {
         const matchDiff = maxMatches - p.matchesPlayed;
@@ -643,17 +643,29 @@ const App: React.FC = () => {
   };
 
   const handleNextMatch = (tournamentId: string) => {
+    const tour = activeTournaments.find(t => t.id === tournamentId);
+    if (!tour) return;
+
+    // RULE (Dynamic Swiss-System / Mexicano):
+    // Jadwal babak berikutnya baru bisa di-generate setelah babak saat ini selesai.
+    const hasLiveMatches = tour.matches.some(m => m.status === 'live');
+    if (hasLiveMatches && tour.type.includes('Mexicano')) {
+      alert("Babak saat ini belum selesai! Selesaikan semua pertandingan yang sedang berlangsung di lapangan sebelum membuat babak berikutnya.");
+      setCurrentView('live');
+      return;
+    }
+
     setActiveTournaments(prev => prev.map(t => {
       if (t.id === tournamentId) {
         let newMatches: Match[] = [];
         const roundNumber = (t.matches[t.matches.length - 1]?.round || 0) + 1;
 
         if (t.type === 'Mexicano') {
-          newMatches = generateMexicanoRound(t.players, t.courts, roundNumber);
+          newMatches = generateMexicanoRound(t.players, t.courts, roundNumber, t.matches);
         } else if (t.type === 'Mexicano Mix') {
-          newMatches = generateMexicanoMixRound(t.players, t.courts, roundNumber);
+          newMatches = generateMexicanoMixRound(t.players, t.courts, roundNumber, t.matches);
         } else if (t.type === 'Mexicano Fix') {
-          newMatches = generateMexicanoFixRound(t.players, t.courts, roundNumber);
+          newMatches = generateMexicanoFixRound(t.players, t.courts, roundNumber, t.matches);
         } else if (t.type === 'Americano Mix') {
           newMatches = generateAmericanoMixRound(t.players, t.courts, roundNumber);
         } else if (t.type === 'Americano Fix') {
@@ -926,7 +938,14 @@ const App: React.FC = () => {
           {currentView === 'leaderboard' && activeTournament && (
             <Leaderboard 
               tournament={activeTournament} 
-              onGoLive={() => handleNextMatch(activeTournament.id)} 
+              onGoLive={() => {
+                const hasLive = activeTournament.matches.some(m => m.status === 'live');
+                if (hasLive) {
+                  setCurrentView('live');
+                } else {
+                  handleNextMatch(activeTournament.id);
+                }
+              }} 
               onEnd={() => handleEndTournament(activeTournament.id)}
               onUpdatePlayerName={(pId, name) => handleUpdatePlayer(activeTournament.id, pId, name)}
               onAddPlayer={(name, gender) => handleAddPlayerToActive(activeTournament.id, name, gender)}
