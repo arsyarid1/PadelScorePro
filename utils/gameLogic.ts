@@ -217,6 +217,19 @@ export const countPreviousPartnerships = (
 };
 
 /**
+ * Count how many matches a player has played so far
+ */
+export const countPlayerMatches = (playerId: string, matches: Match[]): number => {
+  let count = 0;
+  for (const m of matches) {
+    if (m.teamA.playerIds.includes(playerId) || m.teamB.playerIds.includes(playerId)) {
+      count++;
+    }
+  }
+  return count;
+};
+
+/**
  * Count how many times playerA and playerB have played against each other as opponents
  */
 export const countPreviousRivalries = (
@@ -398,26 +411,54 @@ export const generateMexicanoMixRound = (
   roundNumber: number,
   previousMatches: Match[] = []
 ): Match[] => {
-  const males = [...players].filter(p => p.gender === 'male').sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-    return a.seed - b.seed;
-  });
-  const females = [...players].filter(p => p.gender === 'female').sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-    return a.seed - b.seed;
-  });
+  const males = [...players].filter(p => p.gender === 'male');
+  const females = [...players].filter(p => p.gender === 'female');
 
-  const maxMatches = Math.min(courts, Math.floor(Math.min(males.length, females.length) / 2));
+  if (males.length < 2 || females.length < 2) return [];
+
+  const maxMatches = Math.min(courts, Math.floor(males.length / 2), Math.floor(females.length / 2));
+  if (maxMatches === 0) return [];
+
+  const neededMales = maxMatches * 2;
+  const neededFemales = maxMatches * 2;
+
+  // Fair bench rotation: prioritize players who played fewer matches, then leaderboard points
+  const selectActive = (group: Player[], needed: number) => {
+    if (group.length === needed) {
+      return [...group].sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+        return (a.seed || 0) - (b.seed || 0);
+      });
+    }
+    const sorted = [...group].sort((a, b) => {
+      const mA = countPlayerMatches(a.id, previousMatches);
+      const mB = countPlayerMatches(b.id, previousMatches);
+      if (mA !== mB) return mA - mB;
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return (a.seed || 0) - (b.seed || 0);
+    });
+    const chosen = sorted.slice(0, needed);
+    // Sort selected players by points for court assignment (top courts get best players)
+    return chosen.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return (a.seed || 0) - (b.seed || 0);
+    });
+  };
+
+  const activeMales = selectActive(males, neededMales);
+  const activeFemales = selectActive(females, neededFemales);
+
   const matches: Match[] = [];
 
   for (let i = 0; i < maxMatches; i++) {
     const offset = i * 2;
-    const m1 = males[offset];
-    const m2 = males[offset + 1];
-    const f1 = females[offset];
-    const f2 = females[offset + 1];
+    const m1 = activeMales[offset];
+    const m2 = activeMales[offset + 1];
+    const f1 = activeFemales[offset];
+    const f2 = activeFemales[offset + 1];
 
     if (m1 && f1 && m2 && f2) {
       // Balanced Cross: Tim A: M1 + F2 vs Tim B: M2 + F1
@@ -449,25 +490,47 @@ export const generateMexicanoMixRound = (
   return matches;
 };
 
-export const generateAmericanoMixRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
-  const males = [...players.filter(p => p.gender === 'male')].sort((a, b) => a.seed - b.seed || a.id.localeCompare(b.id));
-  const females = [...players.filter(p => p.gender === 'female')].sort((a, b) => a.seed - b.seed || a.id.localeCompare(b.id));
+export const generateAmericanoMixRound = (
+  players: Player[], 
+  courts: number, 
+  roundNumber: number,
+  previousMatches: Match[] = []
+): Match[] => {
+  const males = [...players.filter(p => p.gender === 'male')];
+  const females = [...players.filter(p => p.gender === 'female')];
   
-  if (males.length === 0 || females.length === 0) return [];
+  if (males.length < 2 || females.length < 2) return [];
 
-  // To rotate, we use the roundNumber to shift the female array
-  const shift = (roundNumber - 1) % females.length;
-  const shiftedFemales = [...females.slice(shift), ...females.slice(0, shift)];
-  
+  const maxMatches = Math.min(courts, Math.floor(males.length / 2), Math.floor(females.length / 2));
+  if (maxMatches === 0) return [];
+
+  const neededMales = maxMatches * 2;
+  const neededFemales = maxMatches * 2;
+
+  // Fair selection if uneven: prioritize players who played fewer matches
+  const selectActive = (group: Player[], needed: number) => {
+    if (group.length === needed) return [...group];
+    const sorted = [...group].sort((a, b) => {
+      const mA = countPlayerMatches(a.id, previousMatches);
+      const mB = countPlayerMatches(b.id, previousMatches);
+      if (mA !== mB) return mA - mB;
+      return (a.seed || 0) - (b.seed || 0) || a.id.localeCompare(b.id);
+    });
+    return sorted.slice(0, needed);
+  };
+
+  const activeMales = selectActive(males, neededMales);
+  const activeFemales = selectActive(females, neededFemales);
+
+  // Shift females to rotate partners each round
+  const shift = (roundNumber - 1) % activeFemales.length;
+  const shiftedFemales = [...activeFemales.slice(shift), ...activeFemales.slice(0, shift)];
+
   const matches: Match[] = [];
-  const maxMatches = Math.min(courts, Math.floor(Math.min(males.length, females.length) / 2));
-
-  // Now we have pairs: (males[i], shiftedFemales[i])
-  // We pair these teams into matches: 1 Male + 1 Female per team
   for (let i = 0; i < maxMatches; i++) {
-    const t1_m = males[i * 2];
+    const t1_m = activeMales[i * 2];
     const t1_f = shiftedFemales[i * 2];
-    const t2_m = males[i * 2 + 1];
+    const t2_m = activeMales[i * 2 + 1];
     const t2_f = shiftedFemales[i * 2 + 1];
 
     if (t1_m && t1_f && t2_m && t2_f) {

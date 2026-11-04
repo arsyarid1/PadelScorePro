@@ -202,7 +202,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
   
   const malesCount = players.filter(p => p.gender === 'male').length;
   const femalesCount = players.filter(p => p.gender === 'female').length;
-  const isMixBalanced = malesCount === femalesCount && malesCount >= 2;
+  const isMixValid = malesCount >= 2 && femalesCount >= 2;
 
   const isFixValid = players.length > 0 && players.length % 4 === 0;
 
@@ -212,7 +212,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
   const isClubFixValid = isClubBalanced && clubCounts[0] % 2 === 0; // Each club needs even players for pairs
 
   const canStart = players.length >= 4 && 
-    (!(isMexicanoMix || isAmericanoMix) || isMixBalanced) &&
+    (!(isMexicanoMix || isAmericanoMix) || isMixValid) &&
     (!isFix || isFixValid) &&
     (!isClubMatch || (isClubBalanced && (!isFix || isClubFixValid)));
 
@@ -233,8 +233,8 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
       alert("Fixed Partner modes require a multiple of 4 players (4, 8, 12...) to ensure an even number of teams.");
       return;
     }
-    if ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) {
-      alert("Mix modes require an equal number of male and female players (at least 2 each).");
+    if ((isMexicanoMix || isAmericanoMix) && !isMixValid) {
+      alert("Mix modes require at least 2 male and 2 female players (min. 1 match).");
       return;
     }
     
@@ -974,7 +974,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
                        (isClubMatch && !isClubBalanced) ? 'Balance Clubs' :
                        (type === 'Club Fix Americano' && !isClubFixValid) ? 'Even Pairs' :
                        (isFix && !isClubMatch && !isFixValid) ? 'Need 4, 8, 12...' : 
-                       ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) ? 'Balance Gender' : 
+                       ((isMexicanoMix || isAmericanoMix) && !isMixValid) ? 'Min 2M & 2F' : 
                        'Initialize Tournament'}
                     </>
                   )}

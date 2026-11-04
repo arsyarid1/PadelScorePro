@@ -236,16 +236,16 @@ const App: React.FC = () => {
     } else if (setup.type === 'Mexicano Mix') {
       const males = setup.players.filter((p: any) => p.gender === 'male');
       const females = setup.players.filter((p: any) => p.gender === 'female');
-      if (males.length < 2 || females.length < 2 || males.length !== females.length) {
-        alert("Mix modes require an equal number of male and female players.");
+      if (males.length < 2 || females.length < 2) {
+        alert("Mix modes require at least 2 male and 2 female players (min. 1 match).");
         return;
       }
       matches = generateRandomMixRound(setup.players, setup.courts, 1);
     } else if (setup.type === 'Americano Mix') {
       const males = setup.players.filter((p: any) => p.gender === 'male');
       const females = setup.players.filter((p: any) => p.gender === 'female');
-      if (males.length < 2 || females.length < 2 || males.length !== females.length) {
-        alert("Mix modes require an equal number of male and female players.");
+      if (males.length < 2 || females.length < 2) {
+        alert("Mix modes require at least 2 male and 2 female players (min. 1 match).");
         return;
       }
       matches = generateAmericanoMixRound(setup.players, setup.courts, 1);
@@ -667,7 +667,7 @@ const App: React.FC = () => {
         } else if (t.type === 'Mexicano Fix') {
           newMatches = generateMexicanoFixRound(t.players, t.courts, roundNumber, t.matches);
         } else if (t.type === 'Americano Mix') {
-          newMatches = generateAmericanoMixRound(t.players, t.courts, roundNumber);
+          newMatches = generateAmericanoMixRound(t.players, t.courts, roundNumber, t.matches);
         } else if (t.type === 'Americano Fix') {
           newMatches = generateAmericanoFixRound(t.players, roundNumber);
         } else if (t.type === 'Club Americano') {
