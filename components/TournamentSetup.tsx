@@ -193,8 +193,9 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
   };
 
   const isOdd = players.length % 2 !== 0;
-  const isFix = type === 'Americano Fix' || type === 'Mexicano Fix' || type === 'Club Fix Americano';
-  const isMexicano = type === 'Mexicano' || type === 'Mexicano Mix' || type === 'Mexicano Fix' || type === 'Club Mexicano';
+  const isFix = type === 'Americano Fix' || type === 'Mexicano Fix' || type === 'Club Fix Americano' || type === 'Professional Tournament';
+  const isMix = type === 'Americano Mix' || type === 'Mexicano Mix';
+  const showTeamGrouping = isFix || isMix;
   const isMexicanoMix = type === 'Mexicano Mix';
   const isAmericanoMix = type === 'Americano Mix';
   const isClubMatch = type.startsWith('Club');
@@ -211,7 +212,6 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
   const isClubFixValid = isClubBalanced && clubCounts[0] % 2 === 0; // Each club needs even players for pairs
 
   const canStart = players.length >= 4 && 
-    (!isMexicano || !isOdd) && 
     (!(isMexicanoMix || isAmericanoMix) || isMixBalanced) &&
     (!isFix || isFixValid) &&
     (!isClubMatch || (isClubBalanced && (!isFix || isClubFixValid)));
@@ -231,10 +231,6 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
     }
     if (isFix && !isClubMatch && !isFixValid) {
       alert("Fixed Partner modes require a multiple of 4 players (4, 8, 12...) to ensure an even number of teams.");
-      return;
-    }
-    if (isMexicano && isOdd) {
-      alert("Mexicano requires an even number of players to form fixed pairs.");
       return;
     }
     if ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) {
@@ -904,7 +900,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
                           exit={{ opacity: 0, x: -20 }}
                           className="flex flex-col"
                         >
-                          {(isMexicano || isFix) && isFirstInPair && (
+                          {showTeamGrouping && isFirstInPair && (
                             <div className="flex items-center gap-2 mb-2 mt-2 px-1">
                               <span className="text-[8px] font-black text-primary uppercase tracking-widest">Team {Math.floor(idx / 2) + 1}</span>
                               <div className="h-px flex-1 bg-primary/20"></div>
@@ -978,7 +974,6 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
                        (isClubMatch && !isClubBalanced) ? 'Balance Clubs' :
                        (type === 'Club Fix Americano' && !isClubFixValid) ? 'Even Pairs' :
                        (isFix && !isClubMatch && !isFixValid) ? 'Need 4, 8, 12...' : 
-                       (isMexicano && isOdd) ? 'Fix Pairs' : 
                        ((isMexicanoMix || isAmericanoMix) && !isMixBalanced) ? 'Balance Gender' : 
                        'Initialize Tournament'}
                     </>
