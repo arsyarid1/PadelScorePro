@@ -195,7 +195,7 @@ const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, initialPlaye
   const isOdd = players.length % 2 !== 0;
   const isFix = type === 'Americano Fix' || type === 'Mexicano Fix' || type === 'Club Fix Americano' || type === 'Professional Tournament';
   const isMix = type === 'Americano Mix' || type === 'Mexicano Mix';
-  const showTeamGrouping = isFix || isMix;
+  const showTeamGrouping = isFix;
   const isMexicanoMix = type === 'Mexicano Mix';
   const isAmericanoMix = type === 'Americano Mix';
   const isClubMatch = type.startsWith('Club');

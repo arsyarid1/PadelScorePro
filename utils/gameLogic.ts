@@ -450,9 +450,11 @@ export const generateMexicanoMixRound = (
 };
 
 export const generateAmericanoMixRound = (players: Player[], courts: number, roundNumber: number): Match[] => {
-  const males = shuffle(players.filter(p => p.gender === 'male'));
-  const females = shuffle(players.filter(p => p.gender === 'female'));
+  const males = [...players.filter(p => p.gender === 'male')].sort((a, b) => a.seed - b.seed || a.id.localeCompare(b.id));
+  const females = [...players.filter(p => p.gender === 'female')].sort((a, b) => a.seed - b.seed || a.id.localeCompare(b.id));
   
+  if (males.length === 0 || females.length === 0) return [];
+
   // To rotate, we use the roundNumber to shift the female array
   const shift = (roundNumber - 1) % females.length;
   const shiftedFemales = [...females.slice(shift), ...females.slice(0, shift)];
@@ -461,7 +463,7 @@ export const generateAmericanoMixRound = (players: Player[], courts: number, rou
   const maxMatches = Math.min(courts, Math.floor(Math.min(males.length, females.length) / 2));
 
   // Now we have pairs: (males[i], shiftedFemales[i])
-  // We need to pair these teams into matches
+  // We pair these teams into matches: 1 Male + 1 Female per team
   for (let i = 0; i < maxMatches; i++) {
     const t1_m = males[i * 2];
     const t1_f = shiftedFemales[i * 2];
@@ -480,8 +482,7 @@ export const generateAmericanoMixRound = (players: Player[], courts: number, rou
     }
   }
   
-  // Shuffle matches and re-assign court numbers for better randomness
-  return shuffle(matches).map((m, idx) => ({ ...m, court: idx + 1 }));
+  return matches;
 };
 
 export const generateFixedTeams = (players: Player[]): { p1: Player, p2: Player }[] => {
@@ -673,6 +674,13 @@ export const generateMatches = (players: Player[], type: GameType, rounds: numbe
   if (type === 'Mexicano') {
     // Mexicano: Round 1 is randomized draw
     return generateRandomRound(players, 99, 1);
+  } else if (type === 'Mexicano Mix') {
+    return generateRandomMixRound(players, 99, 1);
+  } else if (type === 'Americano Mix') {
+    for (let r = 0; r < rounds; r++) {
+      matches.push(...generateAmericanoMixRound(players, 99, r + 1));
+    }
+    return matches;
   } else if (type === 'Americano Fix') {
     return generateAmericanoFixMatches(players, rounds);
   } else if (type === 'Mexicano Fix') {
