@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Tournament, MatchState, Player } from '../types';
+import { Tournament, MatchState, Player, Match } from '../types';
 import ChangeMatchupModal from './ChangeMatchupModal';
+import MatchShareModal from './MatchShareModal';
 
 interface LiveScoreboardProps {
   tournament: Tournament;
@@ -257,7 +258,28 @@ const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
   const [flash, setFlash] = useState<{ team: 'A' | 'B' | null, color: 'green' | 'red' }>({ team: null, color: 'green' });
   const [isFinished, setIsFinished] = useState(liveMatch.status === 'finished');
   const [showMatchupModal, setShowMatchupModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const lastClickTime = React.useRef<number>(0);
+
+  const matchToShare = useMemo(() => {
+    if (!liveMatch) return null;
+    return {
+      ...liveMatch,
+      teamA: {
+        ...liveMatch.teamA,
+        score: match.teamA.score,
+        games: match.teamA.games,
+        sets: match.teamA.sets
+      },
+      teamB: {
+        ...liveMatch.teamB,
+        score: match.teamB.score,
+        games: match.teamB.games,
+        sets: match.teamB.sets
+      },
+      status: isFinished ? 'finished' : liveMatch.status
+    } as Match;
+  }, [liveMatch, match, isFinished]);
 
   const canChangeMatchup = !tournament.type.startsWith('Club') && tournament.type !== 'Professional Tournament' && !isFinished;
 
@@ -443,9 +465,16 @@ const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
               <p className="text-slate-400 font-bold uppercase tracking-widest text-xs md:text-sm mb-8 md:mb-12">
                 Final Score: {match.teamA.games} - {match.teamB.games}
               </p>
-              <div className="flex flex-col w-full gap-4">
-                <button onClick={onNextMatch || onEndMatch} className="w-full h-16 md:h-20 bg-primary text-background-dark rounded-2xl font-black uppercase tracking-widest text-lg md:text-xl shadow-[0_10px_40px_rgba(0,255,204,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all">Next Match</button>
-                <button onClick={onEndMatch} className="w-full h-12 md:h-14 border-2 border-white/10 text-white/50 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-white/5 transition-all">Back to Leaderboard</button>
+              <div className="flex flex-col w-full gap-3">
+                <button 
+                  onClick={() => setShowShareModal(true)} 
+                  className="w-full h-14 md:h-16 bg-primary text-background-dark rounded-2xl font-black uppercase tracking-widest text-base md:text-lg shadow-[0_10px_40px_rgba(0,255,204,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-2xl">share</span>
+                  <span>Bagikan Hasil Skor</span>
+                </button>
+                <button onClick={onNextMatch || onEndMatch} className="w-full h-12 md:h-14 bg-surface border-2 border-primary/30 text-white rounded-xl font-bold uppercase tracking-widest text-xs md:text-sm hover:bg-white/5 transition-all">Next Match</button>
+                <button onClick={onEndMatch} className="w-full h-10 md:h-12 border border-white/10 text-white/50 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-white/5 transition-all">Back to Leaderboard</button>
               </div>
             </div>
             <Confetti />
@@ -505,6 +534,14 @@ const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
               teamB: { ...prev.teamB, players: bIds }
             }));
           }}
+        />
+      )}
+
+      {showShareModal && matchToShare && (
+        <MatchShareModal
+          match={matchToShare}
+          tournament={tournament}
+          onClose={() => setShowShareModal(false)}
         />
       )}
     </div>

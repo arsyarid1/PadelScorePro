@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Tournament, Match, Player, TennisRule, MatchState } from '../types';
 import ChangeMatchupModal from './ChangeMatchupModal';
+import MatchShareModal from './MatchShareModal';
 
 interface MultiCourtScoreboardProps {
   tournament: Tournament;
@@ -422,6 +423,7 @@ const CourtCard: React.FC<{
   shortcode?: string;
   canChangeMatchup?: boolean;
   onOpenChangeMatchup?: (match: Match) => void;
+  onShareMatch?: (match: Match) => void;
 }> = ({ 
   match, 
   players, 
@@ -434,7 +436,8 @@ const CourtCard: React.FC<{
   isCloud, 
   shortcode,
   canChangeMatchup,
-  onOpenChangeMatchup
+  onOpenChangeMatchup,
+  onShareMatch
 }) => {
   const [showLargeQR, setShowLargeQR] = useState(false);
   const getPlayer = (id: string) => players.find(p => p.id === id);
@@ -640,9 +643,20 @@ const CourtCard: React.FC<{
             )}
           </div>
         ) : (
-           <div className="h-full w-full flex items-center justify-center gap-3 border border-primary/20 rounded-lg md:rounded-xl bg-primary/5">
-             <span className="text-[10px] font-black uppercase text-primary tracking-[0.5em]">Locked</span>
-             <span className="material-symbols-outlined text-sm md:text-xl text-primary">verified</span>
+           <div className="h-full w-full flex items-center justify-between px-3 md:px-5 border border-primary/20 rounded-lg md:rounded-xl bg-primary/5">
+             <div className="flex items-center gap-2 text-primary">
+               <span className="material-symbols-outlined text-base md:text-xl text-primary">verified</span>
+               <span className="text-[10px] md:text-xs font-black uppercase text-primary tracking-wider">Finished</span>
+             </div>
+             {onShareMatch && (
+               <button
+                 onClick={() => onShareMatch(match)}
+                 className="px-3.5 py-1.5 rounded-lg bg-primary text-background-dark font-black uppercase text-[10px] md:text-xs tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,255,204,0.3)] hover:scale-105 active:scale-95 transition-all"
+               >
+                 <span className="material-symbols-outlined text-xs md:text-sm">share</span>
+                 <span>Share Result</span>
+               </button>
+             )}
            </div>
         )}
       </div>
@@ -661,6 +675,7 @@ const MultiCourtScoreboard: React.FC<MultiCourtScoreboardProps> = ({
 }) => {
   const [adminMatch, setAdminMatch] = useState<Match | null>(null);
   const [matchupMatch, setMatchupMatch] = useState<Match | null>(null);
+  const [shareMatch, setShareMatch] = useState<Match | null>(null);
 
   const canChangeMatchup = !tournament.type.startsWith('Club') && tournament.type !== 'Professional Tournament';
   
@@ -788,6 +803,7 @@ const MultiCourtScoreboard: React.FC<MultiCourtScoreboardProps> = ({
                 shortcode={tournament.shortcode}
                 canChangeMatchup={canChangeMatchup && match.status !== 'finished'}
                 onOpenChangeMatchup={(m) => setMatchupMatch(m)}
+                onShareMatch={(m) => setShareMatch(m)}
               />
             </div>
           ))}
@@ -833,6 +849,14 @@ const MultiCourtScoreboard: React.FC<MultiCourtScoreboardProps> = ({
               onUpdateMatchPlayers(mId, aIds, bIds);
             }
           }}
+        />
+      )}
+
+      {shareMatch && (
+        <MatchShareModal
+          match={shareMatch}
+          tournament={tournament}
+          onClose={() => setShareMatch(null)}
         />
       )}
     </div>
