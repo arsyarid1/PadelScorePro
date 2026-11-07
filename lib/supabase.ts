@@ -10,9 +10,29 @@ if (!isSupabaseConfigured) {
   console.warn('Supabase credentials missing. Real-time features are disabled (running local-first).');
 }
 
+const createDummySupabaseClient = () => {
+  const dummyChannel = {
+    on: () => dummyChannel,
+    subscribe: () => dummyChannel,
+    unsubscribe: () => {},
+    send: () => {},
+    track: () => Promise.resolve()
+  };
+
+  return {
+    channel: () => dummyChannel,
+    from: () => ({
+      select: () => Promise.resolve({ data: [], error: null }),
+      insert: () => Promise.resolve({ data: null, error: null }),
+      update: () => Promise.resolve({ data: null, error: null }),
+      delete: () => Promise.resolve({ data: null, error: null })
+    })
+  } as any;
+};
+
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
-  : (createClient('https://placeholder.supabase.co', 'placeholder') as any);
+  : createDummySupabaseClient();
 
 export const BROADCAST_CHANNELS = {
   TOURNAMENT: (tournamentId: string) => `tournament:${tournamentId}`,

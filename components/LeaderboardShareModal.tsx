@@ -198,28 +198,39 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         ctx.stroke();
 
         // Avatar
-        try {
-          const img = await loadImage(p.player.avatarUrl);
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(img, p.x - p.r, p.y - 15 - p.r, p.r * 2, p.r * 2);
-          ctx.restore();
-
-          // Border on Avatar
-          ctx.beginPath();
-          ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = p.rank === '1' ? 4 : 3;
-          ctx.stroke();
-        } catch {
+        const avatarUrl = p.player.avatarUrl;
+        let drawn = false;
+        if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
+          try {
+            const img = await loadImage(avatarUrl);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(img, p.x - p.r, p.y - 15 - p.r, p.r * 2, p.r * 2);
+            ctx.restore();
+            drawn = true;
+          } catch {}
+        }
+        if (!drawn) {
           ctx.beginPath();
           ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
           ctx.fillStyle = '#1e293b';
           ctx.fill();
+          ctx.fillStyle = p.color;
+          ctx.font = '900 24px Montserrat, sans-serif';
+          ctx.textAlign = 'center';
+          const initials = (p.player.name || '?').substring(0, 2).toUpperCase();
+          ctx.fillText(initials, p.x, p.y - 6);
         }
+
+        // Border on Avatar
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.rank === '1' ? 4 : 3;
+        ctx.stroke();
 
         // Rank Badge
         ctx.fillStyle = p.color;
@@ -230,13 +241,14 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         // Player Name
         ctx.fillStyle = '#ffffff';
         ctx.font = '800 18px Montserrat, sans-serif';
-        const pName = p.player.name.length > 14 ? p.player.name.substring(0, 12) + '...' : p.player.name;
+        const pName = p.player.name?.length > 14 ? p.player.name.substring(0, 12) + '...' : (p.player.name || 'Player');
         ctx.fillText(pName.toUpperCase(), p.x, p.y + 70);
 
         // Score
         ctx.fillStyle = p.color;
         ctx.font = '900 22px Montserrat, sans-serif';
-        ctx.fillText(`${p.player.stats.totalPoints} PTS`, p.x, p.y + 95);
+        const pScore = p.player.stats?.totalPoints ?? p.player.points ?? 0;
+        ctx.fillText(`${pScore} PTS`, p.x, p.y + 95);
 
         ctx.restore();
       }
@@ -472,12 +484,12 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
                   </h3>
                   {playersWithStats[0] && (
                     <p className="text-xs text-slate-300">
-                      Juara 1: <strong className="text-primary">{playersWithStats[0].name}</strong> ({playersWithStats[0].stats.totalPoints} PTS)
+                      Juara 1: <strong className="text-primary">{playersWithStats[0].name}</strong> ({playersWithStats[0].stats?.totalPoints ?? playersWithStats[0].points ?? 0} PTS)
                     </p>
                   )}
                   {playersWithStats[1] && (
                     <p className="text-xs text-slate-300">
-                      Runner-up: <strong className="text-slate-200">{playersWithStats[1].name}</strong> ({playersWithStats[1].stats.totalPoints} PTS)
+                      Runner-up: <strong className="text-slate-200">{playersWithStats[1].name}</strong> ({playersWithStats[1].stats?.totalPoints ?? playersWithStats[1].points ?? 0} PTS)
                     </p>
                   )}
                 </div>
@@ -540,13 +552,13 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {finishedMatches.map(match => {
-                    const scoreA = isRally ? match.teamA.score : (match.teamA.games ?? match.teamA.score ?? 0);
-                    const scoreB = isRally ? match.teamB.score : (match.teamB.games ?? match.teamB.score ?? 0);
+                    const scoreA = isRally ? (match.teamA?.score ?? 0) : (match.teamA?.games ?? match.teamA?.score ?? 0);
+                    const scoreB = isRally ? (match.teamB?.score ?? 0) : (match.teamB?.games ?? match.teamB?.score ?? 0);
                     const isWinnerA = scoreA > scoreB;
                     const isWinnerB = scoreB > scoreA;
 
-                    const teamAName = getPlayerNames(match.teamA.playerIds);
-                    const teamBName = getPlayerNames(match.teamB.playerIds);
+                    const teamAName = getPlayerNames(match.teamA?.playerIds || []);
+                    const teamBName = getPlayerNames(match.teamB?.playerIds || []);
 
                     return (
                       <div 

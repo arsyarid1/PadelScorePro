@@ -12,6 +12,7 @@ import AdminDashboard from './components/AdminDashboard';
 import SpectatorView from './components/SpectatorView';
 import ShortcodeEntry from './components/ShortcodeEntry';
 import SuperAdmin from './components/SuperAdmin';
+import ErrorBoundary from './components/ErrorBoundary';
 import { 
   generateMatches, 
   shuffle, 
@@ -923,7 +924,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-background-dark text-white overflow-hidden">
+    <ErrorBoundary onReset={() => setCurrentView('dashboard')}>
+      <div className="flex flex-col md:flex-row h-screen w-full bg-background-dark text-white overflow-hidden">
       <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0">
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#00ffcc 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
@@ -983,6 +985,25 @@ const App: React.FC = () => {
               onExit={() => setCurrentView('dashboard')}
             />
           )}
+          {currentView === 'leaderboard' && !activeTournament && (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+              <span className="material-symbols-outlined text-5xl text-slate-600 mb-3">error_outline</span>
+              <p className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Turnamen tidak ditemukan</p>
+              <button onClick={() => setCurrentView('dashboard')} className="px-5 py-2.5 rounded-xl bg-primary text-background-dark font-black uppercase text-xs">
+                Kembali ke Dashboard
+              </button>
+            </div>
+          )}
+
+          {currentView === 'live' && !activeTournament && (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+              <span className="material-symbols-outlined text-5xl text-slate-600 mb-3">error_outline</span>
+              <p className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Pertandingan tidak ditemukan</p>
+              <button onClick={() => setCurrentView('dashboard')} className="px-5 py-2.5 rounded-xl bg-primary text-background-dark font-black uppercase text-xs">
+                Kembali ke Dashboard
+              </button>
+            </div>
+          )}
           {currentView === 'live' && activeTournament && (
             (activeTournament.courts > 1 || activeTournament.scoringMode === 'late') ? (
               <MultiCourtScoreboard
@@ -1009,6 +1030,7 @@ const App: React.FC = () => {
         </main>
       </div>
     </div>
+    </ErrorBoundary>
   );
 };
 

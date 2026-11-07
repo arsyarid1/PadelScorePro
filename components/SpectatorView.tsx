@@ -217,16 +217,16 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
                         const isMatchFinished = match.status === 'finished';
 
                         // Score to display
-                        const scoreA = isMatchLive && courtScore ? courtScore.teamA.score : match.teamA.score;
-                        const scoreB = isMatchLive && courtScore ? courtScore.teamB.score : match.teamB.score;
+                        const scoreA = isMatchLive && courtScore ? courtScore.teamA.score : (match.teamA?.score ?? 0);
+                        const scoreB = isMatchLive && courtScore ? courtScore.teamB.score : (match.teamB?.score ?? 0);
 
-                        const teamAName = getPlayerNames(match.teamA.playerIds);
-                        const teamBName = getPlayerNames(match.teamB.playerIds);
+                        const teamAName = getPlayerNames(match.teamA?.playerIds || []);
+                        const teamBName = getPlayerNames(match.teamB?.playerIds || []);
 
-                        const pA1 = getPlayer(match.teamA.playerIds[0]);
-                        const pA2 = getPlayer(match.teamA.playerIds[1]);
-                        const pB1 = getPlayer(match.teamB.playerIds[0]);
-                        const pB2 = getPlayer(match.teamB.playerIds[1]);
+                        const pA1 = getPlayer(match.teamA?.playerIds?.[0] || '');
+                        const pA2 = getPlayer(match.teamA?.playerIds?.[1] || '');
+                        const pB1 = getPlayer(match.teamB?.playerIds?.[0] || '');
+                        const pB2 = getPlayer(match.teamB?.playerIds?.[1] || '');
 
                         const isTeamAWinner = isMatchFinished && scoreA > scoreB;
                         const isTeamBWinner = isMatchFinished && scoreB > scoreA;

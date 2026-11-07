@@ -5,6 +5,7 @@ import TournamentBracket from './TournamentBracket';
 import { calculatePlayerStats, getMaxMatchesPlayed } from '../utils/gameLogic';
 import LeaderboardShareModal from './LeaderboardShareModal';
 import MatchShareModal from './MatchShareModal';
+import ErrorBoundary from './ErrorBoundary';
 
 interface ScoreDetailModalProps {
   player: Player & { stats?: PlayerTournamentStats };
@@ -734,18 +735,22 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
       )}
 
       {showShareModal && (
-        <LeaderboardShareModal
-          tournament={tournament}
-          onClose={() => setShowShareModal(false)}
-        />
+        <ErrorBoundary onReset={() => setShowShareModal(false)}>
+          <LeaderboardShareModal
+            tournament={tournament}
+            onClose={() => setShowShareModal(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {shareMatch && (
-        <MatchShareModal
-          match={shareMatch}
-          tournament={tournament}
-          onClose={() => setShareMatch(null)}
-        />
+        <ErrorBoundary onReset={() => setShareMatch(null)}>
+          <MatchShareModal
+            match={shareMatch}
+            tournament={tournament}
+            onClose={() => setShareMatch(null)}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
