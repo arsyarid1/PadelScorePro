@@ -1,15 +1,16 @@
 
 import React, { useState } from 'react';
-import { Tournament, Gender, Player, MatchHistoryEntry } from '../types';
+import { Tournament, Gender, Player, MatchHistoryEntry, PlayerTournamentStats } from '../types';
 import TournamentBracket from './TournamentBracket';
+import { calculatePlayerStats, getMaxMatchesPlayed } from '../utils/gameLogic';
 
 interface ScoreDetailModalProps {
-  player: Player;
+  player: Player & { stats?: PlayerTournamentStats };
   onClose: () => void;
 }
 
 const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, onClose }) => {
-  const totalPoints = player.matchHistory?.reduce((sum, entry) => sum + (typeof entry.score_us === 'number' ? entry.score_us : 0), 0) || 0;
+  const totalPoints = player.stats ? player.stats.totalPoints : (player.matchHistory?.reduce((sum, entry) => sum + (typeof entry.score_us === 'number' ? entry.score_us : 0), 0) || player.points || 0);
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-background-dark/95 backdrop-blur-xl animate-in fade-in duration-300">
@@ -94,22 +95,35 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
   const [newName, setNewName] = useState('');
   const [newGender, setNewGender] = useState<Gender>('male');
   const [leaderboardType, setLeaderboardType] = useState<'individual' | 'club'>(tournament.clubs ? 'club' : 'individual');
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<(Player & { stats: PlayerTournamentStats }) | null>(null);
   const [mixGenderTab, setMixGenderTab] = useState<'both' | 'male' | 'female'>('both');
 
   const isClubMatch = tournament.type.startsWith('Club');
   const isMixMatch = tournament.type === 'Mexicano Mix' || tournament.type === 'Americano Mix';
 
-  const sortedPlayers = [...tournament.players].sort((a, b) => b.points - a.points || b.winRate - a.winRate);
-  const sortedMales = [...tournament.players].filter(p => p.gender === 'male').sort((a, b) => b.points - a.points || b.winRate - a.winRate);
-  const sortedFemales = [...tournament.players].filter(p => p.gender === 'female').sort((a, b) => b.points - a.points || b.winRate - a.winRate);
+  const maxMatches = getMaxMatchesPlayed(tournament.players, tournament.matches);
+
+  const playersWithStats = tournament.players.map(p => ({
+    ...p,
+    stats: calculatePlayerStats(p, tournament.matches, tournament.scoring, maxMatches)
+  }));
+
+  const sortedPlayers = [...playersWithStats].sort((a, b) => {
+    if (b.stats.totalPoints !== a.stats.totalPoints) return b.stats.totalPoints - a.stats.totalPoints;
+    if (b.stats.diff !== a.stats.diff) return b.stats.diff - a.stats.diff;
+    if (b.stats.wins !== a.stats.wins) return b.stats.wins - a.stats.wins;
+    return b.winRate - a.winRate;
+  });
+
+  const sortedMales = sortedPlayers.filter(p => p.gender === 'male');
+  const sortedFemales = sortedPlayers.filter(p => p.gender === 'female');
   
   const isProfessional = tournament.type === 'Professional Tournament';
 
   const clubStats = tournament.clubs?.map(club => {
-    const clubPlayers = tournament.players.filter(p => p.clubId === club.id);
-    const totalPoints = clubPlayers.reduce((sum, p) => sum + p.points, 0);
-    const totalWins = clubPlayers.reduce((sum, p) => sum + p.wins, 0);
+    const clubPlayers = sortedPlayers.filter(p => p.clubId === club.id);
+    const totalPoints = clubPlayers.reduce((sum, p) => sum + p.stats.totalPoints, 0);
+    const totalWins = clubPlayers.reduce((sum, p) => sum + p.stats.wins, 0);
     
     // For Club Fix Americano, wins are counted per pair, but since each player in a winning pair gets a 'win',
     // totalWins / 2 would be the number of match wins.
@@ -130,7 +144,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
   }) || [];
 
   const leader = leaderboardType === 'individual' ? sortedPlayers[0] : (clubStats[0] as any);
-  const totalPoints = tournament.players.reduce((sum, p) => sum + p.points, 0);
+  const totalPoints = sortedPlayers.reduce((sum, p) => sum + p.stats.totalPoints, 0);
 
   const handleStartEdit = (pId: string, currentName: string) => {
     setEditingPlayerId(pId);
@@ -155,84 +169,150 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
 
   const isTournamentActive = tournament.status === 'active';
 
-  const renderPlayerRows = (playersList: Player[]) => {
-    return playersList.map((player, idx) => (
-      <tr key={player.id} className="group hover:bg-primary/5 transition-colors">
-        <td className="px-4 md:px-6 py-4">
-          <span className={`text-base md:text-xl font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>{(idx + 1).toString().padStart(2, '0')}</span>
-        </td>
-        <td className="px-4 md:px-6 py-4">
-          <div className="flex items-center gap-3">
-            <img src={player.avatarUrl} className="size-8 md:size-10 rounded-lg border border-white/10" alt={player.name} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 group/name">
-                {editingPlayerId === player.id ? (
-                  <input
-                    autoFocus
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => {
-                      if (editValue.trim() && editValue !== player.name) {
-                        onUpdatePlayerName(player.id, editValue.trim());
-                      }
-                      setEditingPlayerId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+  const renderTableHeaders = (athleteLabel: string = 'Athlete') => (
+    <tr className="bg-white/5 border-b border-white/10 text-slate-400 font-black text-[8px] md:text-[10px] uppercase tracking-widest">
+      <th className="px-3 md:px-5 py-3.5 text-center w-12 md:w-16">Rank</th>
+      <th className="px-3 md:px-5 py-3.5 text-left">{athleteLabel}</th>
+      <th className="px-2 md:px-4 py-3.5 text-center" title="Games / Matches Played (Total Pertandingan)">G</th>
+      <th className="px-2 md:px-4 py-3.5 text-center" title="Win - Loss - Tie (Menang - Kalah - Seri)">W-L-T</th>
+      <th className="px-2 md:px-4 py-3.5 text-center" title="Point Difference (Selisih Poin Scored - Conceded)">Diff</th>
+      <th className="px-2 md:px-4 py-3.5 text-center text-amber-400/90" title="Compensation Points (+M) bagi pemain yang benched/bye">+M</th>
+      <th className="px-3 md:px-6 py-3.5 text-right text-primary" title="Total Accumulated Points (Match + +M)">Points</th>
+      <th className="px-2 md:px-4 py-3.5 text-right w-12">Action</th>
+    </tr>
+  );
+
+  const renderPlayerRows = (playersList: (Player & { stats: PlayerTournamentStats })[]) => {
+    return playersList.map((player, idx) => {
+      const { stats } = player;
+      return (
+        <tr key={player.id} className="group hover:bg-primary/5 transition-colors border-b border-white/[0.03]">
+          {/* Rank */}
+          <td className="px-3 md:px-5 py-3 text-center">
+            <span className={`text-sm md:text-base font-black italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>
+              {(idx + 1).toString().padStart(2, '0')}
+            </span>
+          </td>
+
+          {/* Player Info */}
+          <td className="px-3 md:px-5 py-3">
+            <div className="flex items-center gap-2.5 md:gap-3">
+              <div className="relative shrink-0">
+                <img src={player.avatarUrl} className="size-8 md:size-9 rounded-xl border border-white/10 object-cover" alt={player.name} />
+                <span className={`absolute -bottom-1 -right-1 size-3.5 rounded-full flex items-center justify-center text-[7px] font-black text-white ${player.gender === 'male' ? 'bg-cyan-500' : 'bg-pink-500'}`}>
+                  {player.gender === 'male' ? 'M' : 'F'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 group/name">
+                  {editingPlayerId === player.id ? (
+                    <input
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => {
                         if (editValue.trim() && editValue !== player.name) {
                           onUpdatePlayerName(player.id, editValue.trim());
                         }
                         setEditingPlayerId(null);
-                      }
-                      if (e.key === 'Escape') setEditingPlayerId(null);
-                    }}
-                    className="bg-white/10 border border-primary/50 rounded px-2 py-0.5 text-white font-bold text-xs md:text-sm w-full outline-none focus:ring-1 focus:ring-primary"
-                  />
-                ) : (
-                  <>
-                    <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
-                    <button 
-                      onClick={() => {
-                        setEditingPlayerId(player.id);
-                        setEditValue(player.name);
                       }}
-                      className="opacity-0 group-hover/name:opacity-100 transition-opacity p-1 hover:text-primary"
-                    >
-                      <span className="material-symbols-outlined text-xs">edit</span>
-                    </button>
-                  </>
-                )}
-                {player.clubId && (
-                  <span className="text-[8px] bg-white/5 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase">
-                    {tournament.clubs?.find(c => c.id === player.clubId)?.name}
-                  </span>
-                )}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (editValue.trim() && editValue !== player.name) {
+                            onUpdatePlayerName(player.id, editValue.trim());
+                          }
+                          setEditingPlayerId(null);
+                        }
+                        if (e.key === 'Escape') setEditingPlayerId(null);
+                      }}
+                      className="bg-white/10 border border-primary/50 rounded px-2 py-0.5 text-white font-bold text-xs md:text-sm w-full outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  ) : (
+                    <>
+                      <p className="font-bold text-white uppercase text-xs md:text-sm tracking-tight truncate">{player.name}</p>
+                      <button 
+                        onClick={() => {
+                          setEditingPlayerId(player.id);
+                          setEditValue(player.name);
+                        }}
+                        className="opacity-0 group-hover/name:opacity-100 transition-opacity p-0.5 hover:text-primary"
+                      >
+                        <span className="material-symbols-outlined text-[11px]">edit</span>
+                      </button>
+                    </>
+                  )}
+                  {player.clubId && (
+                    <span className="text-[7px] bg-white/5 text-slate-400 px-1 py-0.5 rounded font-black uppercase tracking-tighter shrink-0">
+                      {tournament.clubs?.find(c => c.id === player.clubId)?.name}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </td>
-        <td className="px-4 md:px-6 py-4 text-center">
-          <span className="text-xs font-bold text-slate-300">{player.wins}-{player.matchesPlayed - player.wins}</span>
-        </td>
-        <td className="px-4 md:px-6 py-4 text-right">
-          <div className="flex flex-col items-end">
-            <span className="inline-flex items-center justify-center px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 text-[10px] md:text-sm font-black min-w-[50px] md:min-w-[80px]">
-              {player.points}
+          </td>
+
+          {/* G (Games / Matches Played) */}
+          <td className="px-2 md:px-4 py-3 text-center">
+            <span className="text-xs font-bold text-slate-300 bg-white/5 px-2 py-0.5 rounded">
+              {stats.gamesPlayed}
             </span>
-            <span className="text-[7px] text-slate-500 font-bold uppercase mt-1">Accumulated</span>
-          </div>
-        </td>
-        <td className="px-4 md:px-6 py-4 text-right">
-          <button 
-            onClick={() => setSelectedPlayer(player)}
-            className="size-8 md:size-10 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/50 flex items-center justify-center transition-all"
-            title="View Details"
-          >
-            <span className="material-symbols-outlined text-lg">analytics</span>
-          </button>
-        </td>
-      </tr>
-    ));
+          </td>
+
+          {/* W-L-T */}
+          <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
+            <span className="text-xs font-bold tracking-wider text-slate-200">
+              <span className="text-emerald-400">{stats.wins}</span>-
+              <span className="text-red-400">{stats.losses}</span>-
+              <span className="text-slate-400">{stats.ties}</span>
+            </span>
+          </td>
+
+          {/* Diff */}
+          <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
+            <span className={`text-xs font-bold px-2 py-0.5 rounded inline-block min-w-[36px] ${
+              stats.diff > 0 
+                ? 'text-emerald-400 bg-emerald-500/10' 
+                : stats.diff < 0 
+                ? 'text-red-400 bg-red-500/10' 
+                : 'text-slate-400 bg-white/5'
+            }`}>
+              {stats.diff > 0 ? `+${stats.diff}` : stats.diff}
+            </span>
+          </td>
+
+          {/* +M (Compensation) */}
+          <td className="px-2 md:px-4 py-3 text-center">
+            {stats.compensationPoints > 0 ? (
+              <span className="text-xs font-black text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30" title="Poin Kompensasi Cadangan (+M)">
+                +{stats.compensationPoints}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-500">0</span>
+            )}
+          </td>
+
+          {/* Points */}
+          <td className="px-3 md:px-6 py-3 text-right">
+            <div className="flex flex-col items-end">
+              <span className="inline-flex items-center justify-center px-2.5 md:px-3.5 py-1 rounded-lg bg-primary/10 text-primary border border-primary/30 text-xs md:text-sm font-black shadow-[0_0_15px_rgba(0,255,204,0.1)]">
+                {stats.totalPoints}
+              </span>
+            </div>
+          </td>
+
+          {/* Action */}
+          <td className="px-2 md:px-4 py-3 text-right">
+            <button 
+              onClick={() => setSelectedPlayer(player)}
+              className="size-7 md:size-8 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-primary hover:border-primary/50 flex items-center justify-center transition-all ml-auto"
+              title="View Details"
+            >
+              <span className="material-symbols-outlined text-sm">analytics</span>
+            </button>
+          </td>
+        </tr>
+      );
+    });
   };
 
   return (
@@ -363,11 +443,17 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                 <div className="flex justify-between items-end border-t border-white/5 pt-3 md:pt-4">
                   <div>
                     <p className="text-[8px] text-slate-500 uppercase">Played</p>
-                    <p className="text-sm md:text-lg font-bold text-primary">{leader.matchesPlayed}</p>
+                    <p className="text-sm md:text-lg font-bold text-primary">{leader.stats?.gamesPlayed ?? leader.matchesPlayed}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] text-slate-500 uppercase">Diff</p>
+                    <p className={`text-sm md:text-lg font-bold ${leader.stats?.diff > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                      {leader.stats?.diff > 0 ? `+${leader.stats.diff}` : (leader.stats?.diff ?? 0)}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-[8px] text-slate-500 uppercase">Points</p>
-                    <p className="text-sm md:text-lg font-bold text-white">{leader.points}</p>
+                    <p className="text-sm md:text-lg font-bold text-white">{leader.stats?.totalPoints ?? leader.points}</p>
                   </div>
                 </div>
               </div>
@@ -384,7 +470,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                 ></div>
                 <div className="flex-1">
                   <p className="text-[10px] font-bold text-white uppercase line-clamp-1">{player.name}</p>
-                  <p className="text-xs md:text-sm font-bold text-primary">{player.points} PTS</p>
+                  <p className="text-xs md:text-sm font-bold text-primary">{player.stats?.totalPoints ?? player.points} PTS</p>
                 </div>
                 <span className="text-[10px] md:text-xs font-bold text-slate-400">#{idx + 2}</span>
               </div>
@@ -460,15 +546,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                   </span>
                 </div>
                 <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
-                    <thead className="bg-surface-dark/95 backdrop-blur-sm">
-                      <tr className="bg-white/5 border-b border-white/10">
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">Athlete</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">W-L</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
-                      </tr>
+                  <table className="w-full text-left border-collapse min-w-[550px] md:min-w-0">
+                    <thead className="bg-surface-dark/95 backdrop-blur-sm sticky top-0 z-20">
+                      {renderTableHeaders('Pemain Pria')}
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {renderPlayerRows(sortedMales)}
@@ -489,15 +569,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                   </span>
                 </div>
                 <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
-                    <thead className="bg-surface-dark/95 backdrop-blur-sm">
-                      <tr className="bg-white/5 border-b border-white/10">
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">Athlete</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">W-L</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
-                        <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
-                      </tr>
+                  <table className="w-full text-left border-collapse min-w-[550px] md:min-w-0">
+                    <thead className="bg-surface-dark/95 backdrop-blur-sm sticky top-0 z-20">
+                      {renderTableHeaders('Pemain Wanita')}
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {renderPlayerRows(sortedFemales)}
@@ -519,19 +593,19 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
                 </div>
               )}
               <div className="overflow-x-auto custom-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
-                  <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm">
-                    <tr className="bg-white/5 border-b border-white/10">
-                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16 md:w-24">Rank</th>
-                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {leaderboardType === 'individual' ? 'Athlete' : 'Club'}
-                      </th>
-                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">
-                        {leaderboardType === 'individual' ? 'W-L' : 'Match Wins'}
-                      </th>
-                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Total Score</th>
-                      <th className="px-4 md:px-6 py-4 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right w-20">Action</th>
-                    </tr>
+                <table className="w-full text-left border-collapse min-w-[550px] md:min-w-0">
+                  <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm sticky">
+                    {leaderboardType === 'individual' ? (
+                      renderTableHeaders('Player')
+                    ) : (
+                      <tr className="bg-white/5 border-b border-white/10 text-slate-400 font-black text-[8px] md:text-[10px] uppercase tracking-widest">
+                        <th className="px-3 md:px-5 py-3.5 text-center w-12 md:w-16">Rank</th>
+                        <th className="px-3 md:px-5 py-3.5 text-left">Club</th>
+                        <th className="px-3 md:px-5 py-3.5 text-center">Match Wins</th>
+                        <th className="px-3 md:px-6 py-3.5 text-right text-primary">Points</th>
+                        <th className="px-2 md:px-4 py-3.5 text-right w-12">Action</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {leaderboardType === 'individual' ? (
@@ -576,6 +650,18 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
               </div>
             </div>
           )}
+
+          {/* Table Legend */}
+          <div className="mt-4 px-4 py-3 rounded-2xl bg-surface-dark border border-white/5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[9px] text-slate-400">
+            <span className="text-primary font-black uppercase tracking-wider flex items-center gap-1">
+              <span className="material-symbols-outlined text-xs">info</span> Keterangan:
+            </span>
+            <span><b className="text-white">G</b>: Matches Played</span>
+            <span><b className="text-white">W-L-T</b>: Win - Loss - Tie</span>
+            <span><b className="text-white">Diff</b>: Selisih Skor (+/-)</span>
+            <span><b className="text-amber-400">+M</b>: Poin Kompensasi Cadangan</span>
+            <span><b className="text-primary">Points</b>: Total Poin Akumulasi</span>
+          </div>
         </section>
       </main>
 
