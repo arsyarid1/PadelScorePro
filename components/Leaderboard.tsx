@@ -1,15 +1,19 @@
 
 import React, { useState } from 'react';
-import { Tournament, Gender, Player, MatchHistoryEntry, PlayerTournamentStats } from '../types';
+import { Tournament, Gender, Player, MatchHistoryEntry, PlayerTournamentStats, Match } from '../types';
 import TournamentBracket from './TournamentBracket';
 import { calculatePlayerStats, getMaxMatchesPlayed } from '../utils/gameLogic';
+import LeaderboardShareModal from './LeaderboardShareModal';
+import MatchShareModal from './MatchShareModal';
 
 interface ScoreDetailModalProps {
   player: Player & { stats?: PlayerTournamentStats };
+  tournament: Tournament;
+  onShareMatch?: (match: Match) => void;
   onClose: () => void;
 }
 
-const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, onClose }) => {
+const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, tournament, onShareMatch, onClose }) => {
   const totalPoints = player.stats ? player.stats.totalPoints : (player.matchHistory?.reduce((sum, entry) => sum + (typeof entry.score_us === 'number' ? entry.score_us : 0), 0) || player.points || 0);
 
   return (
@@ -42,27 +46,41 @@ const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, onClose }) 
               <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">No match history yet</p>
             </div>
           ) : (
-            [...player.matchHistory].reverse().map((entry, idx) => (
-              <div key={entry.matchId + idx} className="p-4 rounded-xl bg-background-dark border border-white/5 flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${entry.result === 'Win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                      {entry.result}
-                    </span>
-                    <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{entry.type}</span>
+            [...player.matchHistory].reverse().map((entry, idx) => {
+              const matchedMatch = tournament.matches.find(m => m.id === entry.matchId);
+              return (
+                <div key={entry.matchId + idx} className="p-4 rounded-xl bg-background-dark border border-white/5 flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${entry.result === 'Win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                        {entry.result}
+                      </span>
+                      <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{entry.type}</span>
+                    </div>
+                    <p className="text-xs font-bold text-white truncate">vs {entry.opponent}</p>
                   </div>
-                  <p className="text-xs font-bold text-white truncate">vs {entry.opponent}</p>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p className="text-lg font-black text-white italic">
+                        {entry.score_us} - {entry.score_them}
+                      </p>
+                      <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">
+                        {new Date(entry.date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {matchedMatch && onShareMatch && (
+                      <button
+                        onClick={() => onShareMatch(matchedMatch)}
+                        className="size-9 rounded-xl bg-primary/10 hover:bg-primary text-primary hover:text-background-dark flex items-center justify-center transition-all border border-primary/20"
+                        title="Bagikan Kartu Skor Laga Ini"
+                      >
+                        <span className="material-symbols-outlined text-base">share</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-lg font-black text-white italic">
-                    {entry.score_us} - {entry.score_them}
-                  </p>
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">
-                    {new Date(entry.date).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -97,6 +115,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
   const [leaderboardType, setLeaderboardType] = useState<'individual' | 'club'>(tournament.clubs ? 'club' : 'individual');
   const [selectedPlayer, setSelectedPlayer] = useState<(Player & { stats: PlayerTournamentStats }) | null>(null);
   const [mixGenderTab, setMixGenderTab] = useState<'both' | 'male' | 'female'>('both');
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareMatch, setShareMatch] = useState<Match | null>(null);
 
   const isClubMatch = tournament.type.startsWith('Club');
   const isMixMatch = tournament.type === 'Mexicano Mix' || tournament.type === 'Americano Mix';
@@ -338,6 +358,15 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-3">
+          <button 
+            onClick={() => setShowShareModal(true)}
+            className="flex items-center justify-center size-9 md:size-auto md:px-4 md:h-12 rounded-lg md:rounded-xl bg-surface-dark border border-primary/30 text-primary font-bold text-xs hover:bg-primary/10 transition-all gap-1.5 shadow-[0_0_15px_rgba(0,255,204,0.1)]"
+            title="Bagikan Klasemen atau Hasil Pertandingan"
+          >
+            <span className="material-symbols-outlined text-lg">share</span>
+            <span className="hidden sm:inline">Bagikan</span>
+          </button>
+
           {isTournamentActive && (
             <>
               <button 
@@ -374,6 +403,36 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
           </button>
         </div>
       </header>
+
+      {/* Finished Tournament Banner */}
+      {!isTournamentActive && (
+        <div className="mx-4 md:mx-10 mt-4 p-4 md:p-6 rounded-2xl bg-gradient-to-r from-primary/15 via-surface-dark to-primary/10 border border-primary/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_40px_rgba(0,255,204,0.1)]">
+          <div className="flex items-center gap-3 md:gap-4 text-center sm:text-left">
+            <div className="size-12 md:size-14 rounded-2xl bg-primary text-background-dark flex items-center justify-center shrink-0 shadow-lg shadow-primary/30">
+              <span className="material-symbols-outlined text-2xl md:text-3xl">emoji_events</span>
+            </div>
+            <div>
+              <h2 className="text-base md:text-xl font-black uppercase italic tracking-tight text-white">
+                Turnamen Telah Selesai!
+              </h2>
+              <p className="text-xs text-slate-300">
+                {sortedPlayers[0] ? (
+                  <>Selamat kepada <strong className="text-primary">{sortedPlayers[0].name}</strong> sebagai Juara 1 ({sortedPlayers[0].stats.totalPoints} PTS)!</>
+                ) : (
+                  'Turnamen resmi berakhir.'
+                )}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="w-full sm:w-auto h-11 md:h-12 px-6 rounded-xl bg-primary text-background-dark font-black uppercase text-xs tracking-wider shadow-[0_0_25px_rgba(0,255,204,0.3)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0"
+          >
+            <span className="material-symbols-outlined text-lg">share</span>
+            <span>Bagikan Hasil & Skor</span>
+          </button>
+        </div>
+      )}
 
       {/* Add Player Modal */}
       {showAddForm && (
@@ -594,7 +653,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
               )}
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[550px] md:min-w-0">
-                  <thead className="top-[72px] z-30 bg-surface-dark/95 backdrop-blur-sm sticky">
+                  <thead className="bg-surface-dark/95 backdrop-blur-sm sticky top-0 z-20">
                     {leaderboardType === 'individual' ? (
                       renderTableHeaders('Player')
                     ) : (
@@ -667,8 +726,25 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
 
       {selectedPlayer && (
         <ScoreDetailModal 
-          player={selectedPlayer} 
+          player={selectedPlayer}
+          tournament={tournament}
+          onShareMatch={(m) => setShareMatch(m)}
           onClose={() => setSelectedPlayer(null)} 
+        />
+      )}
+
+      {showShareModal && (
+        <LeaderboardShareModal
+          tournament={tournament}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
+
+      {shareMatch && (
+        <MatchShareModal
+          match={shareMatch}
+          tournament={tournament}
+          onClose={() => setShareMatch(null)}
         />
       )}
     </div>
