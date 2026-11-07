@@ -35,17 +35,18 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
   }, [tournament.id]);
 
   // Compute player tournament statistics
-  const maxMatches = useMemo(() => getMaxMatchesPlayed(tournament.matches), [tournament.matches]);
-  const isRally = tournament.scoring === 'Rally Points';
+  const maxMatches = useMemo(() => {
+    return getMaxMatchesPlayed(tournament.players || [], tournament.matches || []);
+  }, [tournament.players, tournament.matches]);
 
   const playersWithStats = useMemo(() => {
-    return tournament.players.map(player => ({
+    return (tournament.players || []).map(player => ({
       ...player,
       stats: calculatePlayerStats(
-        player.id,
-        tournament.matches,
-        maxMatches,
-        isRally ? tournament.maxPoints : undefined
+        player,
+        tournament.matches || [],
+        tournament.scoring,
+        maxMatches
       )
     })).sort((a, b) => {
       if (b.stats.totalPoints !== a.stats.totalPoints) {
@@ -56,7 +57,7 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
       }
       return b.stats.wins - a.stats.wins;
     });
-  }, [tournament.players, tournament.matches, maxMatches, isRally, tournament.maxPoints]);
+  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring]);
 
   const malePlayers = useMemo(() => playersWithStats.filter(p => p.gender === 'male'), [playersWithStats]);
   const femalePlayers = useMemo(() => playersWithStats.filter(p => p.gender === 'female'), [playersWithStats]);

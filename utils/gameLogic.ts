@@ -235,13 +235,33 @@ export const countPlayerMatches = (playerId: string, matches: Match[]): number =
  * +M (Compensation points for rest rounds), and Points (Total points including +M).
  */
 export const calculatePlayerStats = (
-  player: Player,
-  allMatches: Match[],
+  player: Player | string,
+  allMatches: Match[] = [],
   scoringFormat: string = 'Rally Points',
   maxTournamentMatches?: number
 ): PlayerTournamentStats => {
-  const finishedMatches = allMatches.filter(
-    m => m.status === 'finished' && (m.teamA.playerIds.includes(player.id) || m.teamB.playerIds.includes(player.id))
+  const playerId = typeof player === 'string' ? player : player?.id;
+  const playerObj = typeof player === 'object' && player !== null ? player : undefined;
+
+  if (!playerId) {
+    return {
+      gamesPlayed: 0,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      pointsScored: 0,
+      pointsConceded: 0,
+      diff: 0,
+      compensationPoints: 0,
+      totalPoints: 0
+    };
+  }
+
+  const finishedMatches = (allMatches || []).filter(
+    m => m && m.status === 'finished' && (
+      (m.teamA?.playerIds && m.teamA.playerIds.includes(playerId)) || 
+      (m.teamB?.playerIds && m.teamB.playerIds.includes(playerId))
+    )
   );
 
   let wins = 0;
@@ -251,7 +271,7 @@ export const calculatePlayerStats = (
   let pointsConceded = 0;
 
   for (const m of finishedMatches) {
-    const isTeamA = m.teamA.playerIds.includes(player.id);
+    const isTeamA = m.teamA?.playerIds?.includes(playerId);
     const myScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamA.score : m.teamB.score) : (isTeamA ? (m.teamA.games ?? 0) : (m.teamB.games ?? 0));
     const oppScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamB.score : m.teamA.score) : (isTeamA ? (m.teamB.games ?? 0) : (m.teamA.games ?? 0));
 
@@ -280,7 +300,7 @@ export const calculatePlayerStats = (
   }
 
   // Fallback to player.points if no matches were tracked in allMatches (e.g. initial setup)
-  const basePoints = gamesPlayed > 0 ? pointsScored : (player.points || 0);
+  const basePoints = gamesPlayed > 0 ? pointsScored : (playerObj?.points || 0);
   const totalPoints = basePoints + compensationPoints;
 
   return {
@@ -296,9 +316,37 @@ export const calculatePlayerStats = (
   };
 };
 
-export const getMaxMatchesPlayed = (players: Player[], matches: Match[]): number => {
-  const finished = matches.filter(m => m.status === 'finished');
-  const counts = players.map(p => countPlayerMatches(p.id, finished));
+export const getMaxMatchesPlayed = (arg1?: any, arg2?: any): number => {
+  let players: Player[] = [];
+  let matches: Match[] = [];
+
+  if (Array.isArray(arg1) && Array.isArray(arg2)) {
+    players = arg1;
+    matches = arg2;
+  } else if (Array.isArray(arg1)) {
+    // If only one array passed, detect whether it is matches or players
+    if (arg1.length > 0 && 'court' in arg1[0]) {
+      matches = arg1 as Match[];
+    } else {
+      players = arg1 as Player[];
+    }
+  }
+
+  const finished = (matches || []).filter(m => m && m.status === 'finished');
+  if (finished.length === 0) return 0;
+
+  if (players && players.length > 0) {
+    const counts = players.map(p => countPlayerMatches(p.id, finished));
+    return counts.length > 0 ? Math.max(...counts, 0) : 0;
+  }
+
+  // If players wasn't passed, extract player IDs from finished matches
+  const playerIds = new Set<string>();
+  finished.forEach(m => {
+    m.teamA?.playerIds?.forEach(id => playerIds.add(id));
+    m.teamB?.playerIds?.forEach(id => playerIds.add(id));
+  });
+  const counts = Array.from(playerIds).map(id => countPlayerMatches(id, finished));
   return counts.length > 0 ? Math.max(...counts, 0) : 0;
 };
 

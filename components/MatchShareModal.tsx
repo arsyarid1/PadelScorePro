@@ -7,6 +7,30 @@ interface MatchShareModalProps {
   onClose: () => void;
 }
 
+const drawRoundRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) => {
+  if (typeof ctx.roundRect === 'function') {
+    try {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      return;
+    } catch {}
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+};
+
 export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournament, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -113,7 +137,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       // Pill: Court & Round
       const pillText = `COURT ${match.court || 1}  •  ROUND ${match.round || 1}  •  ${tournament.type.toUpperCase()}`;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.roundRect(320, 185, 440, 42, 21);
+      drawRoundRect(ctx, 320, 185, 440, 42, 21);
       ctx.fill();
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
       ctx.lineWidth = 1;
@@ -121,12 +145,11 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
 
       ctx.fillStyle = '#94a3b8';
       ctx.font = '700 16px sans-serif';
-      ctx.letterSpacing = '2px';
       ctx.fillText(pillText, 540, 212);
 
       // 3. Match Card Container
       ctx.fillStyle = 'rgba(18, 26, 32, 0.85)';
-      ctx.roundRect(80, 260, 920, 560, 36);
+      drawRoundRect(ctx, 80, 260, 920, 560, 36);
       ctx.fill();
       ctx.strokeStyle = 'rgba(0, 255, 204, 0.2)';
       ctx.lineWidth = 2;
@@ -141,11 +164,10 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       // Winner Badge if Team A
       if (isWinnerA) {
         ctx.fillStyle = '#00ffcc';
-        ctx.roundRect(140, 290, 180, 34, 17);
+        drawRoundRect(ctx, 140, 290, 180, 34, 17);
         ctx.fill();
         ctx.fillStyle = '#090d10';
         ctx.font = '900 15px sans-serif';
-        ctx.letterSpacing = '2px';
         ctx.fillText('★ WINNER', 230, 313);
       }
 
@@ -220,17 +242,16 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       // Sets / Match Type Details below score card
       if (match.teamA.sets !== undefined && match.teamB.sets !== undefined && tournament.scoring !== 'Rally Points') {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.roundRect(380, 740, 320, 50, 12);
+        drawRoundRect(ctx, 380, 740, 320, 50, 12);
         ctx.fill();
         ctx.fillStyle = '#00ffcc';
         ctx.font = '700 18px sans-serif';
-        ctx.letterSpacing = '2px';
         ctx.fillText(`SETS: ${match.teamA.sets} - ${match.teamB.sets}`, 540, 772);
       }
 
       // 4. Footer Banner: Result Announcement
       ctx.fillStyle = isDraw ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 255, 204, 0.12)';
-      ctx.roundRect(80, 850, 920, 100, 24);
+      drawRoundRect(ctx, 80, 850, 920, 100, 24);
       ctx.fill();
       ctx.strokeStyle = isDraw ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 255, 204, 0.4)';
       ctx.lineWidth = 2;
@@ -238,22 +259,28 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
 
       ctx.fillStyle = isDraw ? '#ffffff' : '#00ffcc';
       ctx.font = 'italic 900 36px sans-serif';
-      ctx.letterSpacing = '4px';
       ctx.fillText(winnerText, 540, 912);
 
       // 5. Watermark / Link footer
       ctx.fillStyle = '#64748b';
       ctx.font = '600 16px sans-serif';
-      ctx.letterSpacing = '1px';
       ctx.fillText(`Official Live Tournament Scoreboard • ${publicUrl}`, 540, 995);
 
       // Export to Data URI
-      const dataUri = canvas.toDataURL('image/png');
-      setImageUri(dataUri);
-      setIsGenerating(false);
+      try {
+        const dataUri = canvas.toDataURL('image/png');
+        setImageUri(dataUri);
+      } catch (e) {
+        console.warn("Match card export warning:", e);
+      } finally {
+        setIsGenerating(false);
+      }
     };
 
-    generateCanvas();
+    generateCanvas().catch(err => {
+      console.error("Match canvas error:", err);
+      setIsGenerating(false);
+    });
   }, [match, tournament]);
 
   // Handle Native Web Share API

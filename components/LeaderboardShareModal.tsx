@@ -9,6 +9,30 @@ interface LeaderboardShareModalProps {
   initialTab?: 'leaderboard' | 'matches';
 }
 
+const drawRoundRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) => {
+  if (typeof ctx.roundRect === 'function') {
+    try {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      return;
+    } catch {}
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+};
+
 const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({ 
   tournament, 
   onClose,
@@ -22,18 +46,19 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
-  // Compute player tournament statistics
-  const maxMatches = useMemo(() => getMaxMatchesPlayed(tournament.matches), [tournament.matches]);
-  const isRally = tournament.scoring === 'Rally Points';
+  // Compute player tournament statistics defensively
+  const maxMatches = useMemo(() => {
+    return getMaxMatchesPlayed(tournament.players || [], tournament.matches || []);
+  }, [tournament.players, tournament.matches]);
 
   const playersWithStats = useMemo(() => {
-    return tournament.players.map(player => ({
+    return (tournament.players || []).map(player => ({
       ...player,
       stats: calculatePlayerStats(
-        player.id,
-        tournament.matches,
-        maxMatches,
-        isRally ? tournament.maxPoints : undefined
+        player,
+        tournament.matches || [],
+        tournament.scoring,
+        maxMatches
       )
     })).sort((a, b) => {
       if (b.stats.totalPoints !== a.stats.totalPoints) {
@@ -44,7 +69,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       }
       return b.stats.wins - a.stats.wins;
     });
-  }, [tournament.players, tournament.matches, maxMatches, isRally, tournament.maxPoints]);
+  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring]);
 
   // All completed matches
   const finishedMatches = useMemo(() => {
@@ -168,8 +193,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         ctx.fillStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.08)' : 'rgba(255, 255, 255, 0.03)';
         ctx.strokeStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.4)' : 'rgba(255, 255, 255, 0.08)';
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 20);
+        drawRoundRect(ctx, boxX, boxY, boxWidth, boxHeight, 20);
         ctx.fill();
         ctx.stroke();
 
@@ -290,13 +314,23 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       ctx.letterSpacing = '3px';
       ctx.fillText('PADELSCORE PRO • STADIUM ENGINE', 540, 1025);
 
-      if (isMounted) {
-        setImageUri(canvas.toDataURL('image/png'));
-        setIsGenerating(false);
+      try {
+        if (isMounted) {
+          setImageUri(canvas.toDataURL('image/png'));
+        }
+      } catch (err) {
+        console.warn("Canvas export fallback:", err);
+      } finally {
+        if (isMounted) {
+          setIsGenerating(false);
+        }
       }
     };
 
-    generateCanvas();
+    generateCanvas().catch(err => {
+      console.error("Canvas generation error:", err);
+      if (isMounted) setIsGenerating(false);
+    });
     return () => { isMounted = false; };
   }, [activeTab, playersWithStats, tournament, publicUrl]);
 
