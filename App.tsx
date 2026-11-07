@@ -65,8 +65,39 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     
     console.log("Router check. Path:", path, "Params:", Object.fromEntries(params.entries()));
-    
-    if (path.endsWith('/live')) {
+
+    const tPathMatch = path.match(/\/t\/([a-zA-Z0-9_-]+)/);
+    const directTournamentId = tPathMatch ? tPathMatch[1] : params.get('t');
+
+    if (directTournamentId) {
+      console.log("Direct Tournament Route Detected. TournamentId:", directTournamentId);
+      const local = activeTournaments.find(t => t.id === directTournamentId);
+      if (local) {
+        setCurrentTournamentId(directTournamentId);
+        setCurrentView('spectator');
+      } else {
+        setIsFetching(true);
+        fetch(`/api/tournament/${directTournamentId}`)
+          .then(res => {
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            if (data.id) {
+              setActiveTournaments(prev => {
+                if (prev.find(t => t.id === data.id)) return prev;
+                return [...prev, { ...data, role: 'spectator' }];
+              });
+              setCurrentTournamentId(data.id);
+              setCurrentView('spectator');
+            } else {
+              console.warn("Tournament not found:", directTournamentId);
+            }
+          })
+          .catch(err => console.error("Failed to fetch tournament", err))
+          .finally(() => setIsFetching(false));
+      }
+    } else if (path.endsWith('/live')) {
       const directCode = params.get('code');
       if (directCode) {
         const code = directCode.toUpperCase();
