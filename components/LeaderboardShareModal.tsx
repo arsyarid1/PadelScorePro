@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Tournament, Match, Player, PlayerTournamentStats } from '../types';
 import { calculatePlayerStats, getMaxMatchesPlayed } from '../utils/gameLogic';
+import { buildPublicTournamentUrl } from '../utils/shareUrl';
 import MatchShareModal from './MatchShareModal';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -79,9 +80,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       .sort((a, b) => b.round - a.round || b.court - a.court);
   }, [tournament.matches]);
 
-  const publicUrl = tournament.shortcode 
-    ? `${window.location.origin}/live?code=${tournament.shortcode}`
-    : `${window.location.origin}/t/${tournament.id}`;
+  const publicUrl = useMemo(() => buildPublicTournamentUrl(tournament), [tournament]);
 
   const getPlayer = (id: string): Player | undefined => {
     return tournament.players.find(p => p.id === id);

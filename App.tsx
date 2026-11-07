@@ -33,6 +33,7 @@ import {
 import { getAvatarUrl } from './utils/avatar';
 import { tournamentService } from './services/tournamentService';
 import { trackActivity, startTelemetryHeartbeat } from './utils/analytics';
+import { decodeTournamentSnapshot } from './utils/shareUrl';
 
 const STORAGE_KEY = 'padel_sessions_v1';
 const ADMIN_PASSWORD_HASH = "3b8edbc9b3c65fb0541cc2c564df84561db6372534da2bd3d83236d381ebed77"; // SHA-256 for "padeladmin"
@@ -70,6 +71,22 @@ const App: React.FC = () => {
     
     console.log("Router check. Path:", path, "Params:", Object.fromEntries(params.entries()));
 
+    // 0. Check for embedded tournament snapshot in URL (?d=... or #d=...)
+    const snapshotParam = params.get('d') || (window.location.hash.startsWith('#d=') ? window.location.hash.substring(3) : null);
+    if (snapshotParam) {
+      const decoded = decodeTournamentSnapshot(snapshotParam);
+      if (decoded && decoded.id) {
+        console.log("Loaded tournament snapshot from share link:", decoded.name, decoded.id);
+        setActiveTournaments(prev => {
+          const filtered = prev.filter(t => t.id !== decoded.id);
+          return [...filtered, decoded];
+        });
+        setCurrentTournamentId(decoded.id);
+        setCurrentView('spectator');
+        return;
+      }
+    }
+
     const tPathMatch = path.match(/\/t\/([a-zA-Z0-9_-]+)/);
     const directTournamentId = tPathMatch ? tPathMatch[1] : params.get('t');
 
@@ -96,9 +113,15 @@ const App: React.FC = () => {
               setCurrentView('spectator');
             } else {
               console.warn("Tournament not found:", directTournamentId);
+              alert("Data turnamen tidak ditemukan di server. Pastikan Anda membuka link lengkap hasil skor yang dibagikan dari admin.");
+              setCurrentView('dashboard');
             }
           })
-          .catch(err => console.error("Failed to fetch tournament", err))
+          .catch(err => {
+            console.error("Failed to fetch tournament", err);
+            alert("Data turnamen tidak ditemukan di perangkat ini. Minta pembuat turnamen membagikan link skor terbaru.");
+            setCurrentView('dashboard');
+          })
           .finally(() => setIsFetching(false));
       }
     } else if (path.endsWith('/live')) {

@@ -1,5 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Match, Tournament } from '../types';
+import { buildPublicTournamentUrl } from '../utils/shareUrl';
 
 interface MatchShareModalProps {
   match: Match;
@@ -58,9 +59,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
   const winnerText = isDraw ? "IT'S A DRAW" : (isWinnerA ? "TEAM A WINS" : "TEAM B WINS");
 
   // Tournament Public URL
-  const publicUrl = tournament.shortcode 
-    ? `${window.location.origin}/live?code=${tournament.shortcode}`
-    : `${window.location.origin}/t/${tournament.id}`;
+  const publicUrl = useMemo(() => buildPublicTournamentUrl(tournament), [tournament]);
 
   const captionText = `🎾 *PADELSCORE PRO MATCH RESULT*\n🏆 *${tournament.name}* (Court ${match.court || 1} • Round ${match.round || 1})\n\n🔹 *${teamANames}* [ ${scoreA} ]\n🔸 *${teamBNames}* [ ${scoreB} ]\n\n⭐ *${winnerText}!*\n📊 Lihat klasemen & live score: ${publicUrl}`;
 
