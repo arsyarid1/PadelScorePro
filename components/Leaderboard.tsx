@@ -22,9 +22,14 @@ const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, tournament,
       <div className="w-full max-w-lg bg-surface-dark border border-primary/20 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
         <div className="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-4">
-            <img src={player.avatarUrl} className="size-12 rounded-xl border border-white/10" alt={player.name} />
+            <img 
+              src={player.avatarUrl || '/cover/1.jpg'} 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/cover/1.jpg'; }}
+              className="size-12 rounded-xl border border-white/10 object-cover" 
+              alt={player.name || 'Player'} 
+            />
             <div>
-              <h2 className="text-lg font-black uppercase italic text-white">{player.name}</h2>
+              <h2 className="text-lg font-black uppercase italic text-white">{player.name || 'Pemain'}</h2>
               <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Score History</p>
             </div>
           </div>
@@ -48,25 +53,34 @@ const ScoreDetailModal: React.FC<ScoreDetailModalProps> = ({ player, tournament,
             </div>
           ) : (
             [...player.matchHistory].reverse().map((entry, idx) => {
-              const matchedMatch = tournament.matches.find(m => m.id === entry.matchId);
+              const matchedMatch = tournament?.matches?.find(m => m && m.id === entry.matchId);
+              const formattedDate = entry.date ? (() => {
+                try {
+                  const d = new Date(entry.date);
+                  return isNaN(d.getTime()) ? 'Recent' : d.toLocaleDateString();
+                } catch {
+                  return 'Recent';
+                }
+              })() : 'Recent';
+
               return (
-                <div key={entry.matchId + idx} className="p-4 rounded-xl bg-background-dark border border-white/5 flex items-center justify-between gap-4">
+                <div key={(entry.matchId || 'match') + idx} className="p-4 rounded-xl bg-background-dark border border-white/5 flex items-center justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${entry.result === 'Win' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                        {entry.result}
+                        {entry.result || 'Match'}
                       </span>
-                      <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{entry.type}</span>
+                      <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{entry.type || 'Padel'}</span>
                     </div>
-                    <p className="text-xs font-bold text-white truncate">vs {entry.opponent}</p>
+                    <p className="text-xs font-bold text-white truncate">vs {entry.opponent || 'Opponent'}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <div className="text-right">
                       <p className="text-lg font-black text-white italic">
-                        {entry.score_us} - {entry.score_them}
+                        {entry.score_us ?? 0} - {entry.score_them ?? 0}
                       </p>
                       <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">
-                        {new Date(entry.date).toLocaleDateString()}
+                        {formattedDate}
                       </p>
                     </div>
                     {matchedMatch && onShareMatch && (
@@ -726,12 +740,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
       </main>
 
       {selectedPlayer && (
-        <ScoreDetailModal 
-          player={selectedPlayer}
-          tournament={tournament}
-          onShareMatch={(m) => setShareMatch(m)}
-          onClose={() => setSelectedPlayer(null)} 
-        />
+        <ErrorBoundary onReset={() => setSelectedPlayer(null)}>
+          <ScoreDetailModal 
+            player={selectedPlayer}
+            tournament={tournament}
+            onShareMatch={(m) => setShareMatch(m)}
+            onClose={() => setSelectedPlayer(null)} 
+          />
+        </ErrorBoundary>
       )}
 
       {showShareModal && (

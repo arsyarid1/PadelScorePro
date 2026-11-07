@@ -61,10 +61,15 @@ const LoginModal: React.FC<{
                 </span>
               </button>
             </div>
+            <div className="pt-1">
+              <p className="text-[11px] text-slate-400 text-center font-medium">
+                Default password: <span className="text-primary font-bold">padeladmin</span> atau <span className="text-primary font-bold">admin</span>
+              </p>
+            </div>
             {error && (
               <div className="space-y-1">
                 <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-center">{error}</p>
-                <p className="text-[8px] text-slate-500 text-center uppercase tracking-tighter italic">Hint: all lowercase, no spaces</p>
+                <p className="text-[8px] text-slate-500 text-center uppercase tracking-tighter italic">Gunakan: padeladmin atau admin</p>
               </div>
             )}
           </div>

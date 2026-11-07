@@ -135,3 +135,49 @@ export interface MatchState {
   time: number;
   isTieBreak: boolean;
 }
+
+export interface UserDevice {
+  type: 'Mobile' | 'Tablet' | 'Desktop';
+  os: string;
+  browser: string;
+  screen: string;
+  userAgent: string;
+}
+
+export interface UserLocation {
+  ip: string;
+  city: string;
+  region: string;
+  country: string;
+  countryCode: string;
+  flag: string;
+  isp?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface UserActivitySession {
+  id: string;
+  visitorId: string;
+  userName?: string;
+  role?: string;
+  device: UserDevice;
+  location: UserLocation;
+  currentView: string;
+  action: string;
+  firstSeen: number;
+  lastActive: number;
+  visitCount: number;
+}
+
+export interface AnalyticsSummary {
+  totalVisitors: number;
+  onlineNow: number;
+  deviceBreakdown: {
+    mobile: number;
+    tablet: number;
+    desktop: number;
+  };
+  topLocations: Array<{ name: string; count: number; flag: string }>;
+  recentSessions: UserActivitySession[];
+}

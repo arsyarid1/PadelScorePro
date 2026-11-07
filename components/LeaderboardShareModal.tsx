@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Tournament, Match, Player, PlayerTournamentStats } from '../types';
 import { calculatePlayerStats, getMaxMatchesPlayed } from '../utils/gameLogic';
 import MatchShareModal from './MatchShareModal';
+import ErrorBoundary from './ErrorBoundary';
 
 interface LeaderboardShareModalProps {
   tournament: Tournament;
@@ -552,6 +553,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {finishedMatches.map(match => {
+                    const isRally = tournament.scoring === 'Rally Points';
                     const scoreA = isRally ? (match.teamA?.score ?? 0) : (match.teamA?.games ?? match.teamA?.score ?? 0);
                     const scoreB = isRally ? (match.teamB?.score ?? 0) : (match.teamB?.games ?? match.teamB?.score ?? 0);
                     const isWinnerA = scoreA > scoreB;
@@ -607,11 +609,13 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
 
       {/* Sub-modal: Single Match Share Modal */}
       {selectedMatch && (
-        <MatchShareModal
-          match={selectedMatch}
-          tournament={tournament}
-          onClose={() => setSelectedMatch(null)}
-        />
+        <ErrorBoundary onReset={() => setSelectedMatch(null)}>
+          <MatchShareModal
+            match={selectedMatch}
+            tournament={tournament}
+            onClose={() => setSelectedMatch(null)}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

@@ -19,6 +19,42 @@ async function startServer() {
   // In-memory storage for cloud tournaments (Simulation)
   const cloudTournaments = new Map<string, any>();
   
+  // Storage for User & Device Tracking (Persisted to disk)
+  const ANALYTICS_FILE = path.join(process.cwd(), "analytics_sessions.json");
+  const analyticsSessions = new Map<string, any>();
+
+  // Load existing analytics from disk if available
+  try {
+    if (fs.existsSync(ANALYTICS_FILE)) {
+      const rawData = fs.readFileSync(ANALYTICS_FILE, "utf-8");
+      const parsed = JSON.parse(rawData);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item: any) => {
+          if (item && item.visitorId) {
+            analyticsSessions.set(item.visitorId, item);
+          }
+        });
+        console.log(`[SERVER] Loaded ${analyticsSessions.size} analytics sessions from disk.`);
+      }
+    }
+  } catch (err) {
+    console.warn("[SERVER] Could not load analytics file:", err);
+  }
+
+  // Helper to save analytics to disk (debounced)
+  let saveAnalyticsTimeout: any = null;
+  const saveAnalyticsToDisk = () => {
+    if (saveAnalyticsTimeout) clearTimeout(saveAnalyticsTimeout);
+    saveAnalyticsTimeout = setTimeout(() => {
+      try {
+        const list = Array.from(analyticsSessions.values());
+        fs.writeFileSync(ANALYTICS_FILE, JSON.stringify(list, null, 2), "utf-8");
+      } catch (e) {
+        console.warn("[SERVER] Error persisting analytics:", e);
+      }
+    }, 2000);
+  };
+
   // Predefined shortcodes
   const SHORTCODES = ["PADEL1", "PADEL2", "PADEL3", "PADEL4", "PADEL5", "PRO1", "PRO2", "PRO3", "PRO4", "PRO5", "MATCH1", "MATCH2", "MATCH3"];
   const shortcodeAssignments = new Map<string, string | null>(); // shortcode -> tournamentId
@@ -61,6 +97,130 @@ async function startServer() {
       };
     });
     res.json(list);
+  });
+
+  // Track User & Device Activity API
+  app.post("/api/analytics/track", (req, res) => {
+    try {
+      const { visitorId, visitCount, device, location, currentView, action, role, userName } = req.body;
+      if (!visitorId) {
+        return res.status(400).json({ error: "Missing visitorId" });
+      }
+
+      // Extract client IP address
+      const forwarded = req.headers['x-forwarded-for'];
+      const rawIp = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.socket.remoteAddress || '127.0.0.1';
+      const cleanIp = rawIp.replace(/^::ffff:/, '');
+
+      const now = Date.now();
+      const existing = analyticsSessions.get(visitorId);
+
+      const sessionData = {
+        id: existing?.id || `sess_${Math.random().toString(36).substring(2, 9)}`,
+        visitorId,
+        userName: userName || existing?.userName || `Pengguna (${device?.type || 'Device'})`,
+        role: role || existing?.role || 'Pengunjung',
+        device: {
+          type: device?.type || existing?.device?.type || 'Desktop',
+          os: device?.os || existing?.device?.os || 'Unknown OS',
+          browser: device?.browser || existing?.device?.browser || 'Unknown Browser',
+          screen: device?.screen || existing?.device?.screen || '-',
+          userAgent: device?.userAgent || existing?.device?.userAgent || req.headers['user-agent'] || '-'
+        },
+        location: {
+          ip: cleanIp === '127.0.0.1' || cleanIp === '::1' ? (location?.ip || '127.0.0.1 (Local)') : cleanIp,
+          city: location?.city || existing?.location?.city || 'Local Area',
+          region: location?.region || existing?.location?.region || '',
+          country: location?.country || existing?.location?.country || 'Indonesia',
+          countryCode: location?.countryCode || existing?.location?.countryCode || 'ID',
+          flag: location?.flag || existing?.location?.flag || '🇮🇩',
+          isp: location?.isp || existing?.location?.isp || ''
+        },
+        currentView: currentView || existing?.currentView || 'dashboard',
+        action: action || existing?.action || 'Aktivitas',
+        firstSeen: existing?.firstSeen || now,
+        lastActive: now,
+        visitCount: Math.max(visitCount || 1, (existing?.visitCount || 0) + 1)
+      };
+
+      analyticsSessions.set(visitorId, sessionData);
+      saveAnalyticsToDisk();
+
+      res.json({ success: true, session: sessionData });
+    } catch (err: any) {
+      console.error("[SERVER] Analytics track error:", err);
+      res.status(500).json({ error: err.message || "Failed to record analytics" });
+    }
+  });
+
+  // Get Analytics Summary & Active Sessions for Super Admin
+  app.get("/api/admin/analytics", (req, res) => {
+    try {
+      const now = Date.now();
+      const sessions = Array.from(analyticsSessions.values());
+
+      // Calculate online now (active in last 5 minutes)
+      const onlineThreshold = 5 * 60 * 1000;
+      const onlineNow = sessions.filter(s => (now - s.lastActive) < onlineThreshold).length;
+
+      // Device breakdown
+      const deviceBreakdown = {
+        mobile: 0,
+        tablet: 0,
+        desktop: 0
+      };
+
+      // Top locations aggregation
+      const locationMap = new Map<string, { count: number; flag: string }>();
+
+      sessions.forEach(s => {
+        const type = (s.device?.type || 'Desktop').toLowerCase();
+        if (type === 'mobile') deviceBreakdown.mobile++;
+        else if (type === 'tablet') deviceBreakdown.tablet++;
+        else deviceBreakdown.desktop++;
+
+        const locKey = s.location?.city ? `${s.location.city}, ${s.location.country}` : (s.location?.country || 'Local');
+        const flag = s.location?.flag || '🌐';
+        const current = locationMap.get(locKey) || { count: 0, flag };
+        current.count++;
+        locationMap.set(locKey, current);
+      });
+
+      const topLocations = Array.from(locationMap.entries())
+        .map(([name, data]) => ({ name, count: data.count, flag: data.flag }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8);
+
+      // Sort sessions by lastActive descending
+      const sortedSessions = [...sessions].sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
+
+      res.json({
+        success: true,
+        summary: {
+          totalVisitors: sessions.length,
+          onlineNow,
+          deviceBreakdown,
+          topLocations
+        },
+        sessions: sortedSessions
+      });
+    } catch (err: any) {
+      console.error("[SERVER] Error retrieving analytics:", err);
+      res.status(500).json({ error: "Failed to retrieve analytics" });
+    }
+  });
+
+  // Clear Analytics Logs
+  app.post("/api/admin/analytics/clear", (req, res) => {
+    try {
+      analyticsSessions.clear();
+      if (fs.existsSync(ANALYTICS_FILE)) {
+        fs.writeFileSync(ANALYTICS_FILE, "[]", "utf-8");
+      }
+      res.json({ success: true, message: "Analytics logs cleared successfully." });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to clear logs" });
+    }
   });
 
   app.post("/api/tournament/finish", (req, res) => {

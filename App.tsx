@@ -32,9 +32,12 @@ import {
 } from './utils/gameLogic';
 import { getAvatarUrl } from './utils/avatar';
 import { tournamentService } from './services/tournamentService';
+import { trackActivity, startTelemetryHeartbeat } from './utils/analytics';
 
 const STORAGE_KEY = 'padel_sessions_v1';
-const ADMIN_PASSWORD_HASH = "f8405073e513251214040941198583486191963071853412589578278292839b"; // SHA-256 for "padeladmin"
+const ADMIN_PASSWORD_HASH = "3b8edbc9b3c65fb0541cc2c564df84561db6372534da2bd3d83236d381ebed77"; // SHA-256 for "padeladmin"
+const ADMIN_PASSWORD_HASH_ALT = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"; // SHA-256 for "admin"
+const ADMIN_PASSWORD_LEGACY = "f8405073e513251214040941198583486191963071853412589578278292839b";
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState | 'referee' | 'admin' | 'spectator' | 'superadmin'>('dashboard');
@@ -188,6 +191,24 @@ const App: React.FC = () => {
     }
     setIsInitialized(true);
   }, []);
+
+  // Telemetry Heartbeat & Tracking Initialization
+  useEffect(() => {
+    startTelemetryHeartbeat(
+      () => currentView,
+      () => (isSuperAdmin ? 'Super Admin' : 'User')
+    );
+  }, []);
+
+  // Track page view and tournament switches
+  useEffect(() => {
+    if (!isInitialized) return;
+    const currentTourney = activeTournaments.find(t => t.id === currentTournamentId);
+    const contextName = currentTourney ? ` (${currentTourney.name})` : '';
+    trackActivity(`Membuka: ${currentView}${contextName}`, currentView, {
+      role: isSuperAdmin ? 'Super Admin' : (currentTourney?.role === 'spectator' ? 'Penonton' : 'User')
+    });
+  }, [currentView, currentTournamentId, isInitialized]);
 
   // Real-time Score Sync for Stadium View
   useEffect(() => {
@@ -611,19 +632,28 @@ const App: React.FC = () => {
   const handleSuperAdminLogin = async (password: string): Promise<boolean> => {
     const trimmed = password.trim().toLowerCase();
     
-    // Fallback for plain text check if hashing fails for some reason
-    if (trimmed === 'padeladmin') {
+    // Plain text check for convenience (padeladmin, admin, superadmin)
+    if (trimmed === 'padeladmin' || trimmed === 'admin' || trimmed === 'superadmin') {
       setIsSuperAdmin(true);
       setCurrentView('superadmin');
+      trackActivity('Login Super Admin Berhasil', 'superadmin', { role: 'Super Admin' });
       return true;
     }
 
-    const hashed = await hashPassword(trimmed);
-    
-    if (hashed === ADMIN_PASSWORD_HASH) {
-      setIsSuperAdmin(true);
-      setCurrentView('superadmin');
-      return true;
+    try {
+      const hashed = await hashPassword(trimmed);
+      if (
+        hashed === ADMIN_PASSWORD_HASH || 
+        hashed === ADMIN_PASSWORD_HASH_ALT || 
+        hashed === ADMIN_PASSWORD_LEGACY
+      ) {
+        setIsSuperAdmin(true);
+        setCurrentView('superadmin');
+        trackActivity('Login Super Admin Berhasil', 'superadmin', { role: 'Super Admin' });
+        return true;
+      }
+    } catch (e) {
+      console.warn("Hash verification fallback:", e);
     }
     return false;
   };
@@ -817,18 +847,20 @@ const App: React.FC = () => {
     }
     
     // Plain text fallback for admin password
-    if (trimmedPassword === 'padeladmin') {
+    if (trimmedPassword === 'padeladmin' || trimmedPassword === 'admin' || trimmedPassword === 'superadmin') {
       setActiveTournaments(prev => prev.filter(t => t.id !== id));
       if (currentTournamentId === id) setCurrentTournamentId(null);
       return true;
     }
 
-    const hashed = await hashPassword(trimmedPassword);
-    if (hashed === ADMIN_PASSWORD_HASH) {
-      setActiveTournaments(prev => prev.filter(t => t.id !== id));
-      if (currentTournamentId === id) setCurrentTournamentId(null);
-      return true;
-    }
+    try {
+      const hashed = await hashPassword(trimmedPassword);
+      if (hashed === ADMIN_PASSWORD_HASH || hashed === ADMIN_PASSWORD_HASH_ALT || hashed === ADMIN_PASSWORD_LEGACY) {
+        setActiveTournaments(prev => prev.filter(t => t.id !== id));
+        if (currentTournamentId === id) setCurrentTournamentId(null);
+        return true;
+      }
+    } catch {}
     return false;
   };
 

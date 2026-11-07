@@ -38,17 +38,18 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
   const [copiedLink, setCopiedLink] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
-  const getPlayer = (id: string) => tournament.players.find(p => p.id === id);
+  const playersList = tournament.players || [];
+  const getPlayer = (id: string) => playersList.find(p => p && p.id === id);
 
-  const teamAPlayers = match.teamA.playerIds.map(getPlayer).filter(Boolean);
-  const teamBPlayers = match.teamB.playerIds.map(getPlayer).filter(Boolean);
+  const teamAPlayers = (match?.teamA?.playerIds || []).map(getPlayer).filter(Boolean);
+  const teamBPlayers = (match?.teamB?.playerIds || []).map(getPlayer).filter(Boolean);
 
-  const teamANames = teamAPlayers.map(p => p?.name).join(' / ') || 'Team A';
-  const teamBNames = teamBPlayers.map(p => p?.name).join(' / ') || 'Team B';
+  const teamANames = teamAPlayers.length > 0 ? teamAPlayers.map(p => p?.name).join(' / ') : 'Team A';
+  const teamBNames = teamBPlayers.length > 0 ? teamBPlayers.map(p => p?.name).join(' / ') : 'Team B';
 
   const isRally = tournament.scoring === 'Rally Points';
-  const scoreA = isRally ? match.teamA.score : (match.teamA.games ?? match.teamA.score ?? 0);
-  const scoreB = isRally ? match.teamB.score : (match.teamB.games ?? match.teamB.score ?? 0);
+  const scoreA = isRally ? (match?.teamA?.score ?? 0) : (match?.teamA?.games ?? match?.teamA?.score ?? 0);
+  const scoreB = isRally ? (match?.teamB?.score ?? 0) : (match?.teamB?.games ?? match?.teamB?.score ?? 0);
 
   const isWinnerA = scoreA > scoreB;
   const isWinnerB = scoreB > scoreA;
@@ -203,11 +204,10 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       // Winner Badge if Team B
       if (isWinnerB) {
         ctx.fillStyle = '#00ffcc';
-        ctx.roundRect(760, 290, 180, 34, 17);
+        drawRoundRect(ctx, 760, 290, 180, 34, 17);
         ctx.fill();
         ctx.fillStyle = '#090d10';
         ctx.font = '900 15px sans-serif';
-        ctx.letterSpacing = '2px';
         ctx.fillText('★ WINNER', 850, 313);
       }
 
@@ -240,7 +240,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       ctx.fillText(String(scoreB), 790, pB2 ? 690 : 620);
 
       // Sets / Match Type Details below score card
-      if (match.teamA.sets !== undefined && match.teamB.sets !== undefined && tournament.scoring !== 'Rally Points') {
+      if (match?.teamA?.sets !== undefined && match?.teamB?.sets !== undefined && tournament.scoring !== 'Rally Points') {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
         drawRoundRect(ctx, 380, 740, 320, 50, 12);
         ctx.fill();
@@ -291,7 +291,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       // Convert Data URI to Blob
       const res = await fetch(imageUri);
       const blob = await res.blob();
-      const file = new File([blob], `padel-match-court-${match.court || 1}.png`, { type: 'image/png' });
+      const file = new File([blob], `padel-match-court-${match?.court || 1}.png`, { type: 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
@@ -320,7 +320,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
     if (!imageUri) return;
     const a = document.createElement('a');
     a.href = imageUri;
-    a.download = `padelscore-court-${match.court || 1}-round-${match.round || 1}.png`;
+    a.download = `padelscore-court-${match?.court || 1}-round-${match?.round || 1}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
