@@ -173,44 +173,53 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         });
       };
 
-      // 3. Top 3 Podium Cards (Rank 2, Rank 1, Rank 3) - Perfectly Proportioned Layout
+      // 3. Top 3 Podium Cards (Rank 2, Rank 1, Rank 3) - Clean, Modern Typography without Avatars
       const top3 = playersWithStats.slice(0, 3);
       const podiumConfigs = [
         { 
           player: top3[1], 
           rank: '2', 
-          title: 'RUNNER UP', 
+          badge: '🥈 RUNNER UP', 
           color: '#94a3b8', 
+          badgeBg: 'rgba(255, 255, 255, 0.05)',
+          badgeBorder: 'rgba(255, 255, 255, 0.15)',
           x: 230, 
-          boxY: 205, 
+          boxY: 215, 
           boxWidth: 240, 
-          boxHeight: 205, 
-          avatarY: 260, 
-          avatarR: 38 
+          boxHeight: 185,
+          badgeWidth: 140,
+          badgeHeight: 28,
+          badgeY: 228
         },
         { 
           player: top3[0], 
           rank: '1', 
-          title: 'CHAMPION 👑', 
+          badge: '👑 CHAMPION', 
           color: '#00ffcc', 
+          badgeBg: 'rgba(0, 255, 204, 0.12)',
+          badgeBorder: 'rgba(0, 255, 204, 0.4)',
           x: 540, 
-          boxY: 195, 
-          boxWidth: 260, 
-          boxHeight: 215, 
-          avatarY: 252, 
-          avatarR: 44 
+          boxY: 205, 
+          boxWidth: 270, 
+          boxHeight: 195,
+          badgeWidth: 150,
+          badgeHeight: 32,
+          badgeY: 220
         },
         { 
           player: top3[2], 
           rank: '3', 
-          title: '3RD PLACE', 
+          badge: '🥉 3RD PLACE', 
           color: '#f59e0b', 
+          badgeBg: 'rgba(245, 158, 11, 0.1)',
+          badgeBorder: 'rgba(245, 158, 11, 0.3)',
           x: 850, 
-          boxY: 205, 
+          boxY: 215, 
           boxWidth: 240, 
-          boxHeight: 205, 
-          avatarY: 260, 
-          avatarR: 38 
+          boxHeight: 185,
+          badgeWidth: 140,
+          badgeHeight: 28,
+          badgeY: 228
         }
       ];
 
@@ -222,64 +231,48 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
 
         ctx.save();
         ctx.fillStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.08)' : 'rgba(255, 255, 255, 0.03)';
-        ctx.strokeStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.4)' : 'rgba(255, 255, 255, 0.08)';
+        ctx.strokeStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.5)' : 'rgba(255, 255, 255, 0.08)';
         ctx.lineWidth = 2;
         drawRoundRect(ctx, boxX, p.boxY, p.boxWidth, p.boxHeight, 20);
         ctx.fill();
         ctx.stroke();
 
-        // 1. Avatar (drawn strictly above title with generous breathing room)
-        const avatarUrl = p.player.avatarUrl;
-        let drawn = false;
-        if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
-          try {
-            const img = await loadImage(avatarUrl);
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
-            ctx.closePath();
-            ctx.clip();
-            ctx.drawImage(img, p.x - p.avatarR, p.avatarY - p.avatarR, p.avatarR * 2, p.avatarR * 2);
-            ctx.restore();
-            drawn = true;
-          } catch {}
-        }
-        if (!drawn) {
-          ctx.beginPath();
-          ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
-          ctx.fillStyle = '#1e293b';
-          ctx.fill();
-          ctx.fillStyle = p.color;
-          ctx.font = `900 ${p.rank === '1' ? '20px' : '18px'} Montserrat, sans-serif`;
-          ctx.textAlign = 'center';
-          const initials = (p.player.name || '?').substring(0, 2).toUpperCase();
-          ctx.fillText(initials, p.x, p.avatarY + 7);
-        }
-
-        // Border on Avatar
-        ctx.beginPath();
-        ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = p.rank === '1' ? 3.5 : 2.5;
+        // 1. Top Rank Pill / Badge
+        const badgeX = p.x - p.badgeWidth / 2;
+        ctx.fillStyle = p.badgeBg;
+        ctx.strokeStyle = p.badgeBorder;
+        ctx.lineWidth = 1.5;
+        drawRoundRect(ctx, badgeX, p.badgeY, p.badgeWidth, p.badgeHeight, p.badgeHeight / 2);
+        ctx.fill();
         ctx.stroke();
 
-        // 2. Rank Badge / Title (Comfortable space below avatar: y=325)
         ctx.fillStyle = p.color;
         ctx.font = `900 ${p.rank === '1' ? '13px' : '11px'} Montserrat, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(p.title, p.x, 325);
+        ctx.letterSpacing = '1px';
+        ctx.fillText(p.badge, p.x, p.badgeY + (p.badgeHeight / 2) + 4);
 
-        // 3. Player Name (Clean space below title: y=352)
+        // 2. Player Name (Prominent, Big & Bold)
+        ctx.letterSpacing = '0px';
         ctx.fillStyle = '#ffffff';
-        ctx.font = `900 ${p.rank === '1' ? '20px' : '17px'} Montserrat, sans-serif`;
+        ctx.font = `900 ${p.rank === '1' ? '30px' : '24px'} Montserrat, sans-serif`;
         const pName = p.player.name?.length > 13 ? p.player.name.substring(0, 11) + '...' : (p.player.name || 'Player');
-        ctx.fillText(pName.toUpperCase(), p.x, 352);
+        ctx.fillText(pName.toUpperCase(), p.x, p.boxY + (p.rank === '1' ? 88 : 82));
 
-        // 4. Score (Neon accent: y=382)
+        // 3. Points (Massive Neon Typography)
         ctx.fillStyle = p.color;
-        ctx.font = `900 ${p.rank === '1' ? '22px' : '19px'} Montserrat, sans-serif`;
+        ctx.font = `900 ${p.rank === '1' ? '38px' : '32px'} Montserrat, sans-serif`;
         const pScore = p.player.stats?.totalPoints ?? p.player.points ?? 0;
-        ctx.fillText(`${pScore} PTS`, p.x, 382);
+        ctx.fillText(`${pScore} PTS`, p.x, p.boxY + (p.rank === '1' ? 140 : 130));
+
+        // 4. Subtitle Stats (Matches & Record)
+        ctx.fillStyle = '#64748b';
+        ctx.font = '700 12px Montserrat, sans-serif';
+        const wins = p.player.stats?.wins ?? p.player.wins ?? 0;
+        const losses = p.player.stats?.losses ?? 0;
+        const diff = p.player.stats?.diff ?? 0;
+        const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+        ctx.fillText(`${wins}W - ${losses}L • Diff ${diffStr}`, p.x, p.boxY + (p.rank === '1' ? 172 : 160));
 
         ctx.restore();
       }
@@ -347,8 +340,9 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       });
 
       // 6. Watermark Footer (Clean & Professional)
+      ctx.letterSpacing = '0px';
       ctx.fillStyle = '#64748b';
-      ctx.font = '600 16px Montserrat, sans-serif';
+      ctx.font = '600 15px Montserrat, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`Official Live Tournament Scoreboard • app.padelscore.pro/t/${tournament.id}`, 540, 995);
 
