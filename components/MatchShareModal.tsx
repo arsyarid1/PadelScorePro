@@ -260,10 +260,10 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
       ctx.font = 'italic 900 36px sans-serif';
       ctx.fillText(winnerText, 540, 912);
 
-      // 5. Watermark / Link footer
+      // 5. Watermark / Link footer (Clean)
       ctx.fillStyle = '#64748b';
       ctx.font = '600 16px sans-serif';
-      ctx.fillText(`Official Live Tournament Scoreboard • ${publicUrl}`, 540, 995);
+      ctx.fillText(`Official Live Tournament Scoreboard • app.padelscore.pro/t/${tournament.id}`, 540, 995);
 
       // Export to Data URI
       try {

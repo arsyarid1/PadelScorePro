@@ -151,15 +151,12 @@ export function decodeTournamentSnapshot(encoded: string): Tournament | null {
 }
 
 /**
- * Builds the canonical public shareable URL.
+ * Builds the canonical public shareable URL (Clean & Ringkas without query clutter).
  */
 export function buildPublicTournamentUrl(tournament: Tournament): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.padelscore.pro';
-  const snapshot = encodeTournamentSnapshot(tournament);
-  const snapParam = snapshot ? `?d=${snapshot}` : '';
-
   if (tournament.shortcode) {
-    return `${origin}/live?code=${tournament.shortcode}${snapshot ? `&d=${snapshot}` : ''}`;
+    return `${origin}/live?code=${tournament.shortcode}`;
   }
-  return `${origin}/t/${tournament.id}${snapParam}`;
+  return `${origin}/t/${tournament.id}`;
 }

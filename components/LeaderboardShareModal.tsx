@@ -81,6 +81,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
   }, [tournament.matches]);
 
   const publicUrl = useMemo(() => buildPublicTournamentUrl(tournament), [tournament]);
+  const top3 = useMemo(() => playersWithStats.slice(0, 3), [playersWithStats]);
 
   const getPlayer = (id: string): Player | undefined => {
     return tournament.players.find(p => p.id === id);
@@ -172,32 +173,62 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         });
       };
 
-      // 3. Top 3 Podium Cards (Rank 2, Rank 1, Rank 3)
+      // 3. Top 3 Podium Cards (Rank 2, Rank 1, Rank 3) - Perfectly Proportioned Layout
       const top3 = playersWithStats.slice(0, 3);
       const podiumConfigs = [
-        { player: top3[1], rank: '2', title: 'RUNNER UP', color: '#94a3b8', x: 230, y: 310, r: 48, scale: 0.9 },
-        { player: top3[0], rank: '1', title: 'CHAMPION 👑', color: '#00ffcc', x: 540, y: 295, r: 60, scale: 1.1 },
-        { player: top3[2], rank: '3', title: '3RD PLACE', color: '#f59e0b', x: 850, y: 310, r: 48, scale: 0.9 }
+        { 
+          player: top3[1], 
+          rank: '2', 
+          title: 'RUNNER UP', 
+          color: '#94a3b8', 
+          x: 230, 
+          boxY: 205, 
+          boxWidth: 240, 
+          boxHeight: 205, 
+          avatarY: 260, 
+          avatarR: 38 
+        },
+        { 
+          player: top3[0], 
+          rank: '1', 
+          title: 'CHAMPION 👑', 
+          color: '#00ffcc', 
+          x: 540, 
+          boxY: 195, 
+          boxWidth: 260, 
+          boxHeight: 215, 
+          avatarY: 252, 
+          avatarR: 44 
+        },
+        { 
+          player: top3[2], 
+          rank: '3', 
+          title: '3RD PLACE', 
+          color: '#f59e0b', 
+          x: 850, 
+          boxY: 205, 
+          boxWidth: 240, 
+          boxHeight: 205, 
+          avatarY: 260, 
+          avatarR: 38 
+        }
       ];
 
       for (const p of podiumConfigs) {
         if (!p.player) continue;
 
         // Podium container box
-        const boxWidth = 260;
-        const boxHeight = 190;
-        const boxX = p.x - boxWidth / 2;
-        const boxY = p.y - 85;
+        const boxX = p.x - p.boxWidth / 2;
 
         ctx.save();
         ctx.fillStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.08)' : 'rgba(255, 255, 255, 0.03)';
         ctx.strokeStyle = p.rank === '1' ? 'rgba(0, 255, 204, 0.4)' : 'rgba(255, 255, 255, 0.08)';
         ctx.lineWidth = 2;
-        drawRoundRect(ctx, boxX, boxY, boxWidth, boxHeight, 20);
+        drawRoundRect(ctx, boxX, p.boxY, p.boxWidth, p.boxHeight, 20);
         ctx.fill();
         ctx.stroke();
 
-        // Avatar
+        // 1. Avatar (drawn strictly above title with generous breathing room)
         const avatarUrl = p.player.avatarUrl;
         let drawn = false;
         if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '') {
@@ -205,50 +236,50 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
             const img = await loadImage(avatarUrl);
             ctx.save();
             ctx.beginPath();
-            ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
+            ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
             ctx.closePath();
             ctx.clip();
-            ctx.drawImage(img, p.x - p.r, p.y - 15 - p.r, p.r * 2, p.r * 2);
+            ctx.drawImage(img, p.x - p.avatarR, p.avatarY - p.avatarR, p.avatarR * 2, p.avatarR * 2);
             ctx.restore();
             drawn = true;
           } catch {}
         }
         if (!drawn) {
           ctx.beginPath();
-          ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
+          ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
           ctx.fillStyle = '#1e293b';
           ctx.fill();
           ctx.fillStyle = p.color;
-          ctx.font = '900 24px Montserrat, sans-serif';
+          ctx.font = `900 ${p.rank === '1' ? '20px' : '18px'} Montserrat, sans-serif`;
           ctx.textAlign = 'center';
           const initials = (p.player.name || '?').substring(0, 2).toUpperCase();
-          ctx.fillText(initials, p.x, p.y - 6);
+          ctx.fillText(initials, p.x, p.avatarY + 7);
         }
 
         // Border on Avatar
         ctx.beginPath();
-        ctx.arc(p.x, p.y - 15, p.r, 0, Math.PI * 2);
+        ctx.arc(p.x, p.avatarY, p.avatarR, 0, Math.PI * 2);
         ctx.strokeStyle = p.color;
-        ctx.lineWidth = p.rank === '1' ? 4 : 3;
+        ctx.lineWidth = p.rank === '1' ? 3.5 : 2.5;
         ctx.stroke();
 
-        // Rank Badge
+        // 2. Rank Badge / Title (Comfortable space below avatar: y=325)
         ctx.fillStyle = p.color;
-        ctx.font = '900 14px Montserrat, sans-serif';
+        ctx.font = `900 ${p.rank === '1' ? '13px' : '11px'} Montserrat, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(p.title, p.x, p.y + 45);
+        ctx.fillText(p.title, p.x, 325);
 
-        // Player Name
+        // 3. Player Name (Clean space below title: y=352)
         ctx.fillStyle = '#ffffff';
-        ctx.font = '800 18px Montserrat, sans-serif';
-        const pName = p.player.name?.length > 14 ? p.player.name.substring(0, 12) + '...' : (p.player.name || 'Player');
-        ctx.fillText(pName.toUpperCase(), p.x, p.y + 70);
+        ctx.font = `900 ${p.rank === '1' ? '20px' : '17px'} Montserrat, sans-serif`;
+        const pName = p.player.name?.length > 13 ? p.player.name.substring(0, 11) + '...' : (p.player.name || 'Player');
+        ctx.fillText(pName.toUpperCase(), p.x, 352);
 
-        // Score
+        // 4. Score (Neon accent: y=382)
         ctx.fillStyle = p.color;
-        ctx.font = '900 22px Montserrat, sans-serif';
+        ctx.font = `900 ${p.rank === '1' ? '22px' : '19px'} Montserrat, sans-serif`;
         const pScore = p.player.stats?.totalPoints ?? p.player.points ?? 0;
-        ctx.fillText(`${pScore} PTS`, p.x, p.y + 95);
+        ctx.fillText(`${pScore} PTS`, p.x, 382);
 
         ctx.restore();
       }
@@ -315,13 +346,13 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         ctx.fillText(player.stats.totalPoints.toString(), 975, rowY + 36);
       });
 
-      // 6. Watermark Footer
+      // 6. Watermark Footer (Clean & Professional)
       ctx.fillStyle = '#64748b';
-      ctx.font = '600 15px Montserrat, sans-serif';
+      ctx.font = '600 16px Montserrat, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`Lihat riwayat pertandingan & live score: ${publicUrl}`, 540, 995);
+      ctx.fillText(`Official Live Tournament Scoreboard • app.padelscore.pro/t/${tournament.id}`, 540, 995);
 
-      ctx.fillStyle = 'rgba(0, 255, 204, 0.6)';
+      ctx.fillStyle = 'rgba(0, 255, 204, 0.7)';
       ctx.font = '800 13px Montserrat, sans-serif';
       ctx.letterSpacing = '3px';
       ctx.fillText('PADELSCORE PRO • STADIUM ENGINE', 540, 1025);
@@ -354,18 +385,23 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       const blob = await response.blob();
       const file = new File([blob], `leaderboard-${tournament.name.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' });
 
+      const champ = top3[0];
+      const runner = top3[1];
+      const third = top3[2];
+      const caption = `🎾 *PADELSCORE PRO - HASIL KLASEMEN*\n🏆 *${tournament.name}*\n\n🥇 Champion: *${champ?.name || '-'}* (${champ?.stats?.totalPoints ?? champ?.points ?? 0} PTS)${runner ? `\n🥈 Runner Up: *${runner.name}* (${runner.stats?.totalPoints ?? runner.points ?? 0} PTS)` : ''}${third ? `\n🥉 3rd Place: *${third.name}* (${third.stats?.totalPoints ?? third.points ?? 0} PTS)` : ''}\n\n📊 Lihat skor & klasemen lengkap:\n${publicUrl}`;
+
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: `${tournament.name} - Klasemen Akhir`,
-          text: `🏆 Hasil klasemen turnamen ${tournament.name}!\nCek detail: ${publicUrl}`
+          text: caption
         });
         setShareSuccess("Berhasil dibagikan!");
         setTimeout(() => setShareSuccess(null), 3000);
       } else if (navigator.share) {
         await navigator.share({
           title: `${tournament.name} - Klasemen Akhir`,
-          text: `🏆 Hasil klasemen turnamen ${tournament.name}!\nCek detail: ${publicUrl}`,
+          text: caption,
           url: publicUrl
         });
         setShareSuccess("Link berhasil dibagikan!");
