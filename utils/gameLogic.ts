@@ -1,5 +1,5 @@
 
-import { Player, Match, GameType, KnockoutMatch, Bracket } from '../types';
+import { Player, Match, GameType, KnockoutMatch, Bracket, PlayerTournamentStats } from '../types';
 
 /**
  * Advanced Matchmaking: Rotation Weight & Dynamic Scheduling
@@ -227,6 +227,79 @@ export const countPlayerMatches = (playerId: string, matches: Match[]): number =
     }
   }
   return count;
+};
+
+/**
+ * Calculates comprehensive PDLUP-style tournament statistics for a player:
+ * G (Games played), W-L-T (Wins, Losses, Ties), Diff (Points scored - conceded),
+ * +M (Compensation points for rest rounds), and Points (Total points including +M).
+ */
+export const calculatePlayerStats = (
+  player: Player,
+  allMatches: Match[],
+  scoringFormat: string = 'Rally Points',
+  maxTournamentMatches?: number
+): PlayerTournamentStats => {
+  const finishedMatches = allMatches.filter(
+    m => m.status === 'finished' && (m.teamA.playerIds.includes(player.id) || m.teamB.playerIds.includes(player.id))
+  );
+
+  let wins = 0;
+  let losses = 0;
+  let ties = 0;
+  let pointsScored = 0;
+  let pointsConceded = 0;
+
+  for (const m of finishedMatches) {
+    const isTeamA = m.teamA.playerIds.includes(player.id);
+    const myScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamA.score : m.teamB.score) : (isTeamA ? (m.teamA.games ?? 0) : (m.teamB.games ?? 0));
+    const oppScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamB.score : m.teamA.score) : (isTeamA ? (m.teamB.games ?? 0) : (m.teamA.games ?? 0));
+
+    pointsScored += (myScore || 0);
+    pointsConceded += (oppScore || 0);
+
+    if (myScore > oppScore) {
+      wins++;
+    } else if (myScore < oppScore) {
+      losses++;
+    } else {
+      ties++;
+    }
+  }
+
+  const gamesPlayed = finishedMatches.length;
+  const diff = pointsScored - pointsConceded;
+
+  // Compensation Points (+M):
+  // When players are rotated/benched unevenly, benched players get average points per match for missed rounds
+  let compensationPoints = 0;
+  if (maxTournamentMatches && maxTournamentMatches > gamesPlayed && gamesPlayed > 0) {
+    const missedMatches = maxTournamentMatches - gamesPlayed;
+    const avgPerMatch = pointsScored / gamesPlayed;
+    compensationPoints = Math.round(missedMatches * avgPerMatch);
+  }
+
+  // Fallback to player.points if no matches were tracked in allMatches (e.g. initial setup)
+  const basePoints = gamesPlayed > 0 ? pointsScored : (player.points || 0);
+  const totalPoints = basePoints + compensationPoints;
+
+  return {
+    gamesPlayed,
+    wins,
+    losses,
+    ties,
+    pointsScored,
+    pointsConceded,
+    diff,
+    compensationPoints,
+    totalPoints
+  };
+};
+
+export const getMaxMatchesPlayed = (players: Player[], matches: Match[]): number => {
+  const finished = matches.filter(m => m.status === 'finished');
+  const counts = players.map(p => countPlayerMatches(p.id, finished));
+  return counts.length > 0 ? Math.max(...counts, 0) : 0;
 };
 
 /**

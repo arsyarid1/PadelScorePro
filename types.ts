@@ -22,6 +22,18 @@ export interface MatchHistoryEntry {
   date: string;
 }
 
+export interface PlayerTournamentStats {
+  gamesPlayed: number;        // G: Matches / games played
+  wins: number;               // W: Wins count
+  losses: number;             // L: Losses count
+  ties: number;               // T: Ties / draws count
+  pointsScored: number;       // Total points scored
+  pointsConceded: number;     // Total points conceded
+  diff: number;               // Diff: pointsScored - pointsConceded
+  compensationPoints: number; // +M: Compensation points for benched / bye rounds
+  totalPoints: number;        // Points: Accumulated points + compensation
+}
+
 export interface Player {
   id: string;
   name: string;
