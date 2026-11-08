@@ -233,12 +233,25 @@ export const countPlayerMatches = (playerId: string, matches: Match[]): number =
  * Calculates comprehensive PDLUP-style tournament statistics for a player:
  * G (Games played), W-L-T (Wins, Losses, Ties), Diff (Points scored - conceded),
  * +M (Compensation points for rest rounds), and Points (Total points including +M).
+ *
+ * Scoring Rules:
+ * 1. Tennis Classic (Best of N, Race to N, Tournament Pro):
+ *    - Win: 4 pts, Tie: 2 pts, Loss: 0 pts
+ *    - Compensation (+M): +2 pts per missed match relative to max matches played
+ *    - Total Points: (wins * 4) + (ties * 2) + (missedMatches * 2)
+ *
+ * 2. Rally Points / Point Accumulation (Scoring 21, etc.):
+ *    - Points Scored: Cumulative match points scored
+ *    - Compensation (+M): +10 pts per missed match (for scoring 21) or Math.floor(maxPoints / 2)
+ *    - Total Points: pointsScored + (missedMatches * compensationPerMatch)
  */
 export const calculatePlayerStats = (
   player: Player | string,
   allMatches: Match[] = [],
   scoringFormat: string = 'Rally Points',
-  maxTournamentMatches?: number
+  maxTournamentMatches?: number,
+  maxPoints: number = 21,
+  customMatchType?: string
 ): PlayerTournamentStats => {
   const playerId = typeof player === 'string' ? player : player?.id;
   const playerObj = typeof player === 'object' && player !== null ? player : undefined;
@@ -264,6 +277,12 @@ export const calculatePlayerStats = (
     )
   );
 
+  const isTennis = scoringFormat === 'Tennis Classic' || 
+                   scoringFormat === 'Custom Match' || 
+                   scoringFormat === 'Tournament Pro' || 
+                   customMatchType === 'Best of' || 
+                   customMatchType === 'Race to';
+
   let wins = 0;
   let losses = 0;
   let ties = 0;
@@ -272,8 +291,12 @@ export const calculatePlayerStats = (
 
   for (const m of finishedMatches) {
     const isTeamA = m.teamA?.playerIds?.includes(playerId);
-    const myScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamA.score : m.teamB.score) : (isTeamA ? (m.teamA.games ?? 0) : (m.teamB.games ?? 0));
-    const oppScore = scoringFormat === 'Rally Points' ? (isTeamA ? m.teamB.score : m.teamA.score) : (isTeamA ? (m.teamB.games ?? 0) : (m.teamA.games ?? 0));
+    const myScore = !isTennis 
+      ? (isTeamA ? (m.teamA.score || 0) : (m.teamB.score || 0)) 
+      : (isTeamA ? (m.teamA.games ?? 0) : (m.teamB.games ?? 0));
+    const oppScore = !isTennis 
+      ? (isTeamA ? (m.teamB.score || 0) : (m.teamA.score || 0)) 
+      : (isTeamA ? (m.teamB.games ?? 0) : (m.teamA.games ?? 0));
 
     pointsScored += (myScore || 0);
     pointsConceded += (oppScore || 0);
@@ -291,17 +314,31 @@ export const calculatePlayerStats = (
   const diff = pointsScored - pointsConceded;
 
   // Compensation Points (+M):
-  // When players are rotated/benched unevenly, benched players get average points per match for missed rounds
-  let compensationPoints = 0;
-  if (maxTournamentMatches && maxTournamentMatches > gamesPlayed && gamesPlayed > 0) {
-    const missedMatches = maxTournamentMatches - gamesPlayed;
-    const avgPerMatch = pointsScored / gamesPlayed;
-    compensationPoints = Math.round(missedMatches * avgPerMatch);
-  }
+  // When players are rotated/benched unevenly, benched players get compensation points for missed rounds
+  const missedMatches = (maxTournamentMatches && maxTournamentMatches > gamesPlayed)
+    ? (maxTournamentMatches - gamesPlayed)
+    : 0;
 
-  // Fallback to player.points if no matches were tracked in allMatches (e.g. initial setup)
-  const basePoints = gamesPlayed > 0 ? pointsScored : (playerObj?.points || 0);
-  const totalPoints = basePoints + compensationPoints;
+  let compensationPoints = 0;
+  let basePoints = 0;
+  let totalPoints = 0;
+
+  if (isTennis) {
+    // TENNIS CLASSIC:
+    // Win = 4 pts, Tie = 2 pts, Loss = 0 pts
+    // Missed match (+M) = 2 pts per missed match
+    basePoints = gamesPlayed > 0 ? (wins * 4) + (ties * 2) : (playerObj?.points || 0);
+    compensationPoints = missedMatches * 2;
+    totalPoints = basePoints + compensationPoints;
+  } else {
+    // RALLY POINTS / POINT ACCUMULATION (Scoring 21, etc.):
+    // Base points = sum of points scored in all matches
+    // Compensation (+M) = 10 pts per missed match for 21-point scoring (or Math.floor(maxPoints / 2))
+    const compPerMissed = (maxPoints && maxPoints > 0) ? Math.floor(maxPoints / 2) : 10;
+    basePoints = gamesPlayed > 0 ? pointsScored : (playerObj?.points || 0);
+    compensationPoints = missedMatches * compPerMissed;
+    totalPoints = basePoints + compensationPoints;
+  }
 
   return {
     gamesPlayed,

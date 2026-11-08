@@ -140,7 +140,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
 
   const playersWithStats = tournament.players.map(p => ({
     ...p,
-    stats: calculatePlayerStats(p, tournament.matches, tournament.scoring, maxMatches)
+    stats: calculatePlayerStats(
+      p, 
+      tournament.matches, 
+      tournament.scoring, 
+      maxMatches,
+      tournament.maxPoints,
+      tournament.customMatchType
+    )
   }));
 
   const sortedPlayers = [...playersWithStats].sort((a, b) => {
@@ -743,7 +750,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
             <span><b className="text-white">G</b>: Matches Played</span>
             <span><b className="text-white">W-L-T</b>: Win - Loss - Tie</span>
             <span><b className="text-white">Diff</b>: Selisih Skor (+/-)</span>
-            <span><b className="text-amber-400">+M</b>: Poin Kompensasi Cadangan</span>
+            <span><b className="text-amber-400">+M</b>: Poin Kompensasi Cadangan (+10 pts per laga tertinggal di scoring 21, +2 pts tennis)</span>
             <span><b className="text-primary">Points</b>: Total Poin Akumulasi</span>
           </div>
         </section>

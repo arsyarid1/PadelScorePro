@@ -46,7 +46,9 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
         player,
         tournament.matches || [],
         tournament.scoring,
-        maxMatches
+        maxMatches,
+        tournament.maxPoints,
+        tournament.customMatchType
       )
     })).sort((a, b) => {
       if (b.stats.totalPoints !== a.stats.totalPoints) {
@@ -57,7 +59,7 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
       }
       return b.stats.wins - a.stats.wins;
     });
-  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring]);
+  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring, tournament.maxPoints, tournament.customMatchType]);
 
   const malePlayers = useMemo(() => playersWithStats.filter(p => p.gender === 'male'), [playersWithStats]);
   const femalePlayers = useMemo(() => playersWithStats.filter(p => p.gender === 'female'), [playersWithStats]);
@@ -494,7 +496,7 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({ tournament, onExit }) => 
                   <span><strong className="text-white">G:</strong> Games Played</span>
                   <span><strong className="text-white">W-L-T:</strong> Menang - Kalah - Seri</span>
                   <span><strong className="text-white">Diff:</strong> Selisih Poin (Skor - Kebobolan)</span>
-                  <span><strong className="text-amber-400">+M:</strong> Kompensasi Cadangan</span>
+                  <span><strong className="text-amber-400">+M:</strong> Kompensasi Cadangan (+10 pts / match scoring 21, +2 pts tennis)</span>
                   <span><strong className="text-primary">Points:</strong> Total Poin Akumulasi</span>
                 </div>
               </div>

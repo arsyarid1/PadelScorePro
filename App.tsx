@@ -420,8 +420,15 @@ const App: React.FC = () => {
           const teamAPlayers = finishedMatch.teamA.playerIds;
           const teamBPlayers = finishedMatch.teamB.playerIds;
 
-          const isWinnerA = t.scoring === 'Rally Points' ? teamAScore > teamBScore : teamAGames > teamBGames;
-          const isWinnerB = t.scoring === 'Rally Points' ? teamBScore > teamAScore : teamBGames > teamAGames;
+          const isTennis = t.scoring === 'Tennis Classic' || 
+                           t.scoring === 'Custom Match' || 
+                           t.scoring === 'Tournament Pro' || 
+                           t.customMatchType === 'Best of' || 
+                           t.customMatchType === 'Race to';
+
+          const isWinnerA = !isTennis ? teamAScore > teamBScore : teamAGames > teamBGames;
+          const isWinnerB = !isTennis ? teamBScore > teamAScore : teamBGames > teamAGames;
+          const isTie = !isTennis ? teamAScore === teamBScore : teamAGames === teamBGames;
 
           // Bracket Progression for Professional Tournament
           if (t.type === 'Professional Tournament' && updatedBracket) {
@@ -459,25 +466,33 @@ const App: React.FC = () => {
           // Calculate max matches played in the tournament BEFORE this match is finalized for these players
           const maxMatchesPlayed = Math.max(...t.players.map(p => p.matchesPlayed), 0);
 
+          // In Tennis Classic: Win = 4 pts, Tie = 2 pts, Loss = 0 pts
+          // In Rally Points: Points scored in the match
+          const gainedPointsA = isTennis 
+            ? (isWinnerA ? 4 : (isTie ? 2 : 0)) 
+            : teamAScore;
+          const gainedPointsB = isTennis 
+            ? (isWinnerB ? 4 : (isTie ? 2 : 0)) 
+            : teamBScore;
+
           updatedPlayers = t.players.map(p => {
             if (teamAPlayers.includes(p.id)) {
               const newWins = isWinnerA ? p.wins + 1 : p.wins;
               const matchesPlayed = p.matchesPlayed + 1;
-              const gainedPoints = t.scoring === 'Rally Points' ? teamAScore : teamAGames;
 
               const historyEntry: MatchHistoryEntry = {
                 matchId,
                 opponent: getOpponentNames(teamBPlayers),
-                score_us: t.scoring === 'Rally Points' ? teamAScore : teamAGames,
-                score_them: t.scoring === 'Rally Points' ? teamBScore : teamBGames,
-                result: isWinnerA ? 'Win' : 'Lose',
+                score_us: !isTennis ? teamAScore : teamAGames,
+                score_them: !isTennis ? teamBScore : teamBGames,
+                result: isWinnerA ? 'Win' : (isTie ? 'Tie' : 'Lose'),
                 type: t.scoring,
                 date: new Date().toISOString()
               };
 
               return { 
                 ...p, 
-                points: p.points + gainedPoints, 
+                points: p.points + gainedPointsA, 
                 matchesPlayed, 
                 wins: newWins,
                 winRate: Math.round((newWins / matchesPlayed) * 100),
@@ -490,21 +505,20 @@ const App: React.FC = () => {
             if (teamBPlayers.includes(p.id)) {
               const newWins = isWinnerB ? p.wins + 1 : p.wins;
               const matchesPlayed = p.matchesPlayed + 1;
-              const gainedPoints = t.scoring === 'Rally Points' ? teamBScore : teamBGames;
 
               const historyEntry: MatchHistoryEntry = {
                 matchId,
                 opponent: getOpponentNames(teamAPlayers),
-                score_us: t.scoring === 'Rally Points' ? teamBScore : teamBGames,
-                score_them: t.scoring === 'Rally Points' ? teamAScore : teamAGames,
-                result: isWinnerB ? 'Win' : 'Lose',
+                score_us: !isTennis ? teamBScore : teamBGames,
+                score_them: !isTennis ? teamAScore : teamAGames,
+                result: isWinnerB ? 'Win' : (isTie ? 'Tie' : 'Lose'),
                 type: t.scoring,
                 date: new Date().toISOString()
               };
 
               return { 
                 ...p, 
-                points: p.points + gainedPoints, 
+                points: p.points + gainedPointsB, 
                 matchesPlayed, 
                 wins: newWins,
                 winRate: Math.round((newWins / matchesPlayed) * 100),

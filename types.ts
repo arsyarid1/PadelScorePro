@@ -17,7 +17,7 @@ export interface MatchHistoryEntry {
   opponent: string;
   score_us: number;
   score_them: number;
-  result: 'Win' | 'Lose';
+  result: 'Win' | 'Lose' | 'Tie';
   type: ScoringFormat;
   date: string;
 }

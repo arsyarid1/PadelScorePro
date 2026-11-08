@@ -60,7 +60,9 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
         player,
         tournament.matches || [],
         tournament.scoring,
-        maxMatches
+        maxMatches,
+        tournament.maxPoints,
+        tournament.customMatchType
       )
     })).sort((a, b) => {
       if (b.stats.totalPoints !== a.stats.totalPoints) {
@@ -71,7 +73,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       }
       return b.stats.wins - a.stats.wins;
     });
-  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring]);
+  }, [tournament.players, tournament.matches, maxMatches, tournament.scoring, tournament.maxPoints, tournament.customMatchType]);
 
   // All completed matches
   const finishedMatches = useMemo(() => {
