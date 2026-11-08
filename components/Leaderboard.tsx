@@ -404,18 +404,28 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament, onGoLive, onEnd, 
             </>
           )}
           
-          <button 
-            onClick={onGoLive}
-            className="flex items-center justify-center h-9 md:h-12 px-3 md:px-6 rounded-lg md:rounded-xl bg-primary text-background-dark font-bold text-[10px] md:text-sm transition-transform active:scale-95 shadow-[0_0_15px_rgba(0,255,204,0.2)]"
-          >
-            <span className="material-symbols-outlined text-lg sm:mr-2">play_arrow</span>
-            <span className="hidden sm:inline">
-              {tournament.matches.some(m => m.status === 'live') ? 'Active Match' : 'Next Round'}
-            </span>
-            <span className="sm:hidden">
-              {tournament.matches.some(m => m.status === 'live') ? 'Match' : 'Next'}
-            </span>
-          </button>
+          {isTournamentActive ? (
+            <button 
+              onClick={onGoLive}
+              className="flex items-center justify-center h-9 md:h-12 px-3 md:px-6 rounded-lg md:rounded-xl bg-primary text-background-dark font-bold text-[10px] md:text-sm transition-transform active:scale-95 shadow-[0_0_15px_rgba(0,255,204,0.2)]"
+            >
+              <span className="material-symbols-outlined text-lg sm:mr-2">play_arrow</span>
+              <span className="hidden sm:inline">
+                {tournament.matches.some(m => m.status === 'live') ? 'Active Match' : 'Next Round'}
+              </span>
+              <span className="sm:hidden">
+                {tournament.matches.some(m => m.status === 'live') ? 'Match' : 'Next'}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex items-center justify-center h-9 md:h-12 px-3 md:px-5 rounded-lg md:rounded-xl bg-primary text-background-dark font-black text-[10px] md:text-xs uppercase tracking-wider transition-transform active:scale-95 shadow-[0_0_20px_rgba(0,255,204,0.3)] gap-1.5"
+            >
+              <span className="material-symbols-outlined text-lg">share</span>
+              <span className="hidden sm:inline">Bagikan Skor</span>
+            </button>
+          )}
         </div>
       </header>
 

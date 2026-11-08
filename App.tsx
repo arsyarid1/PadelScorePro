@@ -826,10 +826,10 @@ const App: React.FC = () => {
     setCurrentTournamentId(id);
     const tournament = activeTournaments.find(t => t.id === id);
     if (tournament) {
-      if (tournament.role === 'spectator') {
-        setCurrentView('spectator');
-      } else if (tournament.status === 'finished') {
+      if (tournament.status === 'finished') {
         setCurrentView('leaderboard');
+      } else if (tournament.role === 'spectator') {
+        setCurrentView('spectator');
       } else {
         setCurrentView('live');
       }
@@ -841,7 +841,11 @@ const App: React.FC = () => {
         .then(data => {
           if (data.id) {
             setActiveTournaments(prev => [...prev, { ...data, role: 'spectator' }]);
-            setCurrentView('spectator');
+            if (data.status === 'finished') {
+              setCurrentView('leaderboard');
+            } else {
+              setCurrentView('spectator');
+            }
           }
         })
         .catch(err => console.error("Failed to fetch global tournament", err))

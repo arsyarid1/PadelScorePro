@@ -410,6 +410,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div className="absolute top-3 left-3 z-1 flex gap-2">
                       <span className="bg-primary text-background-dark text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded tracking-tighter uppercase">Court {displayMatch?.court || 1}</span>
                       {tournament.status === 'active' && <span className="bg-red-500 text-white text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase animate-pulse">Live</span>}
+                      {tournament.status === 'finished' && (
+                        <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">emoji_events</span> Finished
+                        </span>
+                      )}
                       {tournament.role === 'spectator' && (
                         <span className="bg-white/10 backdrop-blur-md text-white text-[8px] md:text-[10px] font-black px-1.5 md:px-2 py-0.5 md:py-1 rounded uppercase border border-white/20">Spectator</span>
                       )}
@@ -465,9 +470,30 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <button 
                       onClick={() => onResume(tournament.id)}
-                      className={`w-full py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-sm transition-all ${tournament.role === 'spectator' ? 'bg-surface-dark border border-white/10 text-white hover:bg-white/5' : 'bg-primary text-background-dark hover:brightness-110'}`}
+                      className={`w-full py-2.5 md:py-3.5 rounded-lg md:rounded-xl font-black text-xs md:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                        tournament.status === 'finished'
+                          ? 'bg-primary text-background-dark shadow-[0_0_20px_rgba(0,255,204,0.25)] hover:scale-[1.02] active:scale-[0.98]'
+                          : (tournament.role === 'spectator'
+                              ? 'bg-surface-dark border border-white/10 text-white hover:bg-white/10'
+                              : 'bg-primary text-background-dark hover:brightness-110 active:scale-95')
+                      }`}
                     >
-                      {tournament.role === 'spectator' ? 'Live Match' : (tournament.status === 'active' ? 'Resume Match' : 'Review Stats')}
+                      {tournament.status === 'finished' ? (
+                        <>
+                          <span className="material-symbols-outlined text-lg">leaderboard</span>
+                          <span>See Leaderboard</span>
+                        </>
+                      ) : tournament.role === 'spectator' ? (
+                        <>
+                          <span className="material-symbols-outlined text-lg">visibility</span>
+                          <span>Live Match</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-lg">play_arrow</span>
+                          <span>Resume Match</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
