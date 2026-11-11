@@ -1,4 +1,5 @@
 import { UserDevice, UserLocation, UserActivitySession } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const VISITOR_KEY = 'padelscore_visitor_id';
 const VISITS_KEY = 'padelscore_visit_count';
@@ -218,7 +219,29 @@ export async function trackActivity(
       timestamp: now
     };
 
-    // Send to local backend server
+    // 1. Direct Cloud Sync via Supabase if configured
+    if (isSupabaseConfigured) {
+      try {
+        supabase.from('user_activity_logs').upsert({
+          visitor_id: visitorId,
+          user_name: payload.userName,
+          role: payload.role,
+          device: payload.device,
+          location: payload.location,
+          current_view: payload.currentView,
+          action: payload.action,
+          visit_count: payload.visitCount,
+          last_active: now,
+          updated_at: new Date(now).toISOString()
+        }, { onConflict: 'visitor_id' }).then(({ error }: any) => {
+          if (error) console.debug('Supabase telemetry notice:', error.message);
+        });
+      } catch (e) {
+        console.debug('Supabase telemetry exception:', e);
+      }
+    }
+
+    // 2. Also send to API endpoint (for Vercel serverless / local server)
     fetch('/api/analytics/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

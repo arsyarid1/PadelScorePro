@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserActivitySession, AnalyticsSummary } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface TournamentInfo {
   id: string;
@@ -38,10 +39,63 @@ export const SuperAdmin: React.FC<SuperAdminProps> = ({ onExit, onFinish, onView
   const fetchAnalytics = async () => {
     setIsRefreshing(true);
     try {
+      // 1. First check Supabase if configured
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('user_activity_logs')
+            .select('*')
+            .order('last_active', { ascending: false })
+            .limit(150);
+
+          if (!error && data && data.length > 0) {
+            const sessions: UserActivitySession[] = data.map((row: any) => ({
+              visitorId: row.visitor_id,
+              userName: row.user_name || 'Pengguna',
+              role: row.role || 'User',
+              device: row.device,
+              location: row.location,
+              currentView: row.current_view,
+              action: row.action,
+              visitCount: row.visit_count || 1,
+              lastActive: Number(row.last_active),
+              status: (Date.now() - Number(row.last_active)) < 5 * 60 * 1000 ? 'online' : 'offline',
+              history: []
+            }));
+
+            const now = Date.now();
+            const activeNow = sessions.filter(s => (now - s.lastActive) < 5 * 60 * 1000).length;
+            const mobile = sessions.filter(s => s.device?.type === 'Mobile').length;
+            const desktop = sessions.filter(s => s.device?.type === 'Desktop').length;
+            const tablet = sessions.filter(s => s.device?.type === 'Tablet').length;
+
+            setAnalytics({
+              summary: {
+                totalVisitors: sessions.length,
+                onlineNow: activeNow,
+                topLocations: [],
+                deviceBreakdown: { mobile, desktop, tablet },
+                recentSessions: sessions.slice(0, 10)
+              },
+              sessions
+            });
+            setLoading(false);
+            setIsRefreshing(false);
+            return;
+          }
+        } catch (sbErr) {
+          console.warn("Supabase analytics query notice:", sbErr);
+        }
+      }
+
+      // 2. Fallback to API endpoint
       const res = await fetch('/api/admin/analytics');
       if (res.ok) {
-        const data = await res.json();
-        setAnalytics(data);
+        const text = await res.text();
+        if (text.startsWith('{') || text.startsWith('[')) {
+          const data = JSON.parse(text);
+          setAnalytics(data);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch analytics", err);
@@ -54,10 +108,11 @@ export const SuperAdmin: React.FC<SuperAdminProps> = ({ onExit, onFinish, onView
   const handleClearAnalytics = async () => {
     if (window.confirm("Apakah Anda yakin ingin menghapus semua riwayat data pengguna & device tracking?")) {
       try {
-        const res = await fetch('/api/admin/analytics/clear', { method: 'POST' });
-        if (res.ok) {
-          fetchAnalytics();
+        if (isSupabaseConfigured) {
+          await supabase.from('user_activity_logs').delete().neq('visitor_id', '');
         }
+        await fetch('/api/admin/analytics/clear', { method: 'POST' }).catch(() => {});
+        fetchAnalytics();
       } catch (err) {
         console.error("Error clearing analytics:", err);
       }
@@ -73,7 +128,31 @@ export const SuperAdmin: React.FC<SuperAdminProps> = ({ onExit, onFinish, onView
       fetchAnalytics();
     }, 15000); // 15 seconds polling for real-time tracking
 
-    return () => clearInterval(interval);
+    // Realtime Supabase Channel
+    let channel: any = null;
+    if (isSupabaseConfigured) {
+      try {
+        channel = supabase
+          .channel('superadmin_telemetry_feed')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'user_activity_logs' },
+            () => {
+              fetchAnalytics();
+            }
+          )
+          .subscribe();
+      } catch (e) {
+        console.debug('Supabase realtime subscription notice:', e);
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, []);
 
   // Format relative time
@@ -127,11 +206,22 @@ export const SuperAdmin: React.FC<SuperAdminProps> = ({ onExit, onFinish, onView
             <span className="material-symbols-outlined text-2xl">admin_panel_settings</span>
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl md:text-2xl font-black italic uppercase tracking-tight">Super Admin Hub</h1>
               <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-primary/20 text-primary border border-primary/30">
                 Live Telemetry
               </span>
+              {isSupabaseConfigured ? (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Supabase Cloud Live
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1" title="Untuk mencatat semua pengunjung di app.padelscore.pro secara global & cloud real-time, hubungkan Supabase di Vercel Environment Variables.">
+                  <span className="size-1.5 rounded-full bg-amber-400"></span>
+                  Cloud DB Belum Terhubung
+                </span>
+              )}
             </div>
             <p className="text-slate-400 text-xs font-medium hidden sm:block">
               Pemantauan Pengguna, Device, Lokasi & Manajemen Turnamen
@@ -202,6 +292,19 @@ export const SuperAdmin: React.FC<SuperAdminProps> = ({ onExit, onFinish, onView
           {/* TAB 1: USER & DEVICE TRACKING */}
           {activeTab === 'tracking' && (
             <>
+              {/* Cloud Database Notice if Supabase not configured */}
+              {!isSupabaseConfigured && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-amber-200">
+                  <span className="material-symbols-outlined text-amber-400 text-xl shrink-0 mt-0.5">info</span>
+                  <div className="flex-1 text-xs">
+                    <p className="font-bold text-amber-300">Database Cloud Supabase Belum Dihubungkan ke Vercel</p>
+                    <p className="text-slate-300 mt-1">
+                      Aplikasi saat ini berjalan dalam mode <em>Local-First</em>. Agar setiap pengguna yang membuka <code className="text-primary font-mono">app.padelscore.pro</code> dari seluruh dunia otomatis tercatat secara real-time di tabel ini, tambahkan <code className="text-amber-300 font-mono">VITE_SUPABASE_URL</code> dan <code className="text-amber-300 font-mono">VITE_SUPABASE_ANON_KEY</code> di Environment Variables Vercel.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Telemetry Stat Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
                 {/* Total Visitors */}
