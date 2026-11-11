@@ -46,6 +46,7 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
   // Compute player tournament statistics defensively
@@ -373,6 +374,14 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
     return () => { isMounted = false; };
   }, [activeTab, playersWithStats, tournament, publicUrl]);
 
+  // Formatted caption for WhatsApp / Social Media
+  const shareCaption = useMemo(() => {
+    const champ = top3[0];
+    const runner = top3[1];
+    const third = top3[2];
+    return `🎾 *PADELSCORE PRO - HASIL KLASEMEN*\n🏆 *${tournament.name}*\n\n🥇 Champion: *${champ?.name || '-'}* (${champ?.stats?.totalPoints ?? champ?.points ?? 0} PTS)${runner ? `\n🥈 Runner Up: *${runner.name}* (${runner.stats?.totalPoints ?? runner.points ?? 0} PTS)` : ''}${third ? `\n🥉 3rd Place: *${third.name}* (${third.stats?.totalPoints ?? third.points ?? 0} PTS)` : ''}\n\n📊 Lihat skor & klasemen lengkap:\n${publicUrl}\n\nScore powered by padelscore.pro`;
+  }, [tournament.name, top3, publicUrl]);
+
   // Web Share API handler
   const handleNativeShare = async () => {
     if (!imageUri) return;
@@ -381,32 +390,33 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
       const blob = await response.blob();
       const file = new File([blob], `leaderboard-${tournament.name.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' });
 
-      const champ = top3[0];
-      const runner = top3[1];
-      const third = top3[2];
-      const caption = `🎾 *PADELSCORE PRO - HASIL KLASEMEN*\n🏆 *${tournament.name}*\n\n🥇 Champion: *${champ?.name || '-'}* (${champ?.stats?.totalPoints ?? champ?.points ?? 0} PTS)${runner ? `\n🥈 Runner Up: *${runner.name}* (${runner.stats?.totalPoints ?? runner.points ?? 0} PTS)` : ''}${third ? `\n🥉 3rd Place: *${third.name}* (${third.stats?.totalPoints ?? third.points ?? 0} PTS)` : ''}\n\n📊 Lihat skor & klasemen lengkap:\n${publicUrl}`;
-
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: `${tournament.name} - Klasemen Akhir`,
-          text: caption
+          text: shareCaption
         });
         setShareSuccess("Berhasil dibagikan!");
         setTimeout(() => setShareSuccess(null), 3000);
       } else if (navigator.share) {
         await navigator.share({
           title: `${tournament.name} - Klasemen Akhir`,
-          text: caption,
+          text: shareCaption,
           url: publicUrl
         });
         setShareSuccess("Link berhasil dibagikan!");
         setTimeout(() => setShareSuccess(null), 3000);
       } else {
         handleDownload();
+        await navigator.clipboard.writeText(shareCaption);
+        setShareSuccess("Gambar diunduh & teks disalin ke clipboard!");
+        setTimeout(() => setShareSuccess(null), 4000);
       }
     } catch {
       handleDownload();
+      try {
+        await navigator.clipboard.writeText(shareCaption);
+      } catch {}
     }
   };
 
@@ -426,6 +436,17 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
     navigator.clipboard.writeText(publicUrl).then(() => {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
+    });
+  };
+
+  const handleCopyText = () => {
+    navigator.clipboard.writeText(shareCaption).then(() => {
+      setCopiedText(true);
+      setShareSuccess("Teks WhatsApp berhasil disalin!");
+      setTimeout(() => {
+        setCopiedText(false);
+        setShareSuccess(null);
+      }, 2500);
     });
   };
 
@@ -562,6 +583,16 @@ const LeaderboardShareModal: React.FC<LeaderboardShareModalProps> = ({
                     <span>{copiedLink ? 'Link Disalin!' : 'Salin Link'}</span>
                   </button>
                 </div>
+
+                <button
+                  onClick={handleCopyText}
+                  className="w-full h-11 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-black uppercase tracking-wider text-[11px] rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">
+                    {copiedText ? 'done' : 'content_copy'}
+                  </span>
+                  <span>{copiedText ? 'Teks WhatsApp Disalin!' : 'Salin Teks WhatsApp'}</span>
+                </button>
               </div>
             </div>
           ) : (

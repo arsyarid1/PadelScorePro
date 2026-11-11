@@ -61,7 +61,7 @@ export const MatchShareModal: React.FC<MatchShareModalProps> = ({ match, tournam
   // Tournament Public URL
   const publicUrl = useMemo(() => buildPublicTournamentUrl(tournament), [tournament]);
 
-  const captionText = `🎾 *PADELSCORE PRO MATCH RESULT*\n🏆 *${tournament.name}* (Court ${match.court || 1} • Round ${match.round || 1})\n\n🔹 *${teamANames}* [ ${scoreA} ]\n🔸 *${teamBNames}* [ ${scoreB} ]\n\n⭐ *${winnerText}!*\n📊 Lihat klasemen & live score: ${publicUrl}`;
+  const captionText = `🎾 *PADELSCORE PRO MATCH RESULT*\n🏆 *${tournament.name}* (Court ${match.court || 1} • Round ${match.round || 1})\n\n🔹 *${teamANames}* [ ${scoreA} ]\n🔸 *${teamBNames}* [ ${scoreB} ]\n\n⭐ *${winnerText}!*\n📊 Lihat klasemen & live score: ${publicUrl}\n\nScore powered by padelscore.pro`;
 
   // Generate High-Res Image on Canvas (1080 x 1080 Square)
   useEffect(() => {
